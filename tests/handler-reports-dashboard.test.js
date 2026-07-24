@@ -3,6 +3,12 @@ const fixture = require("./fixtures/business-fixture");
 const { createHarness, expectCode } = require("./helpers/handler-harness");
 const { localDate, monthKey } = require("../cloudfunctions/api/lib/core");
 
+function addDays(dateText, days) {
+  const date = new Date(`${dateText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function seed() {
   const copy = JSON.parse(JSON.stringify(fixture));
   copy.users.push({ _id: "acct_audit", personId: "A001", name: "测试审核", role: "hq_auditor", disabled: false });
@@ -11,6 +17,8 @@ function seed() {
   });
   copy.policies[0].start = "2020-01-01";
   copy.policies[0].end = "2099-12-31";
+  copy.policies[0].managerId = "M001";
+  copy.policies[0].supervisorId = "S001";
   copy.policies.push({
     _id: "POL_PENDING",
     customerId: "C001",
@@ -97,7 +105,7 @@ function seed() {
     managerId: "M001",
     productId: "P240",
     batchNo: "BATCH-RISK",
-    expiryDate: "2099-12-31",
+    expiryDate: addDays(localDate(), 100),
     qty: 50,
     unitPrice: 60
   }];
@@ -129,6 +137,7 @@ function seed() {
     assert(result.metrics.todaySales > 0);
     assert.strictEqual(result.metrics.missingDaily, 0);
     assert(result.metrics.pending >= 1);
+    assert.strictEqual(result.receivableReminders.length, 1);
     assert(result.tasks.some((item) => item.key === "weekly"));
     assert(harness.rows("weekly_reports").some((item) => item.ownerId === "M001"));
   }
@@ -184,8 +193,13 @@ function seed() {
     const result = await reports.getReports();
     assert(result.commissions.some((item) => item.ownerId === "M001" && item.salesAmount > 0));
     assert(result.risks.some((item) => item.type === "低库存"));
+    assert(result.risks.some((item) => item.type === "近效期"));
     assert(result.weekly.some((item) => item.canSubmit));
     assert.deepStrictEqual(result.audit.map((item) => item.id), ["LOG001"]);
+    assert(result.policies.some((item) => item.id === "POL001"));
+    harness.setUser(boss);
+    const bossResult = await reports.getReports();
+    assert(bossResult.finance.some((item) => item.id === "EXP_FINANCE" && item.canMarkPaid && item.canMarkInvoiced));
   }
 
   // PERFORMANCE-01：老板可切换本月/上月并查看经理、产品和仓库排名。
