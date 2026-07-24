@@ -1,0 +1,73 @@
+<view class="page">
+  <view class="page-title">经营报表</view>
+  <view class="page-subtitle">这里集中查看提成、客户政策、周任务、风险、财务闭环和操作留痕。</view>
+  <view class="tabs">
+    <view class="tab {{tab === 'commissions' ? 'active' : ''}}" data-tab="commissions" bindtap="switchTab">提成</view>
+    <view class="tab {{tab === 'policies' ? 'active' : ''}}" data-tab="policies" bindtap="switchTab">政策</view>
+    <view class="tab {{tab === 'weekly' ? 'active' : ''}}" data-tab="weekly" bindtap="switchTab">周任务</view>
+    <view class="tab {{tab === 'risks' ? 'active' : ''}}" data-tab="risks" bindtap="switchTab">风控</view>
+    <view class="tab {{tab === 'finance' ? 'active' : ''}}" data-tab="finance" bindtap="switchTab">财务</view>
+    <view class="tab {{tab === 'audit' ? 'active' : ''}}" data-tab="audit" bindtap="switchTab">日志</view>
+  </view>
+
+  <view class="section">
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <block wx:elif="{{tab === 'commissions'}}">
+      <view class="section-title">本月提成与客情空间</view>
+      <view wx:if="{{!commissions.length}}" class="empty">本月暂无正式销售。</view>
+      <view wx:for="{{commissions}}" wx:key="key" class="list-row">
+        <view class="row-title">{{item.ownerName}} · {{item.roleName}}</view>
+        <view class="row-meta">销售额¥{{item.salesAmountText}} · 销量{{item.qty}}盒 · 客情空间¥{{item.promoBudgetText}}</view>
+        <view class="amount top-space">提成¥{{item.commissionText}}</view>
+      </view>
+    </block>
+    <block wx:elif="{{tab === 'policies'}}">
+      <view class="section-title">客户政策</view>
+      <view wx:if="{{!policies.length}}" class="empty">暂无可查看政策。</view>
+      <view wx:for="{{policies}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.customerName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+        <view class="row-meta">{{item.productName}} · 销售价¥{{item.invoicePriceText}} · 单盒推广¥{{item.promoSpendText}}</view>
+        <view class="row-meta">{{item.start}}至{{item.end}} · 预计月销{{item.monthlyTarget}}盒</view>
+      </view>
+    </block>
+    <block wx:elif="{{tab === 'weekly'}}">
+      <view class="section-title">每周统计任务</view>
+      <view wx:if="{{!weekly.length}}" class="empty">当前没有周任务。</view>
+      <view wx:for="{{weekly}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.title}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+        <view class="row-meta">{{item.week}} · {{item.note || '待填写本周销售、费用和下周计划'}}</view>
+        <button wx:if="{{item.canSubmit}}" class="btn primary small top-space" data-action="submitWeekly" data-id="{{item.id}}" bindtap="action">提交周统计</button>
+      </view>
+    </block>
+    <block wx:elif="{{tab === 'risks'}}">
+      <view class="section-title">风控事项</view>
+      <view wx:if="{{!risks.length}}" class="empty">当前没有风控异常。</view>
+      <view wx:for="{{risks}}" wx:key="key" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.type}}</view><text class="badge {{item.badge}}">{{item.level}}</text></view>
+        <view class="row-meta">{{item.target}}</view>
+        <view class="row-meta">{{item.detail}}</view>
+      </view>
+    </block>
+    <block wx:elif="{{tab === 'finance'}}">
+      <view class="section-title">费用财务闭环</view>
+      <view wx:if="{{!finance.length}}" class="empty">暂无费用财务记录。</view>
+      <view wx:for="{{finance}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.repName}} · {{item.type}}</view><text class="amount">¥{{item.amountText}}</text></view>
+        <view class="row-meta">{{item.customerName}} · 审批{{item.status}} · 付款{{item.paymentStatus}} · 发票{{item.invoiceStatus}}</view>
+        <view wx:if="{{user.role === 'boss'}}" class="row-actions top-space">
+          <button wx:if="{{item.canMarkPaid}}" class="btn primary small" data-action="markExpensePaid" data-id="{{item.id}}" bindtap="action">确认付款</button>
+          <button wx:if="{{item.canMarkInvoiced}}" class="btn small" data-action="markExpenseInvoiced" data-id="{{item.id}}" bindtap="action">确认收票</button>
+        </view>
+      </view>
+    </block>
+    <block wx:else>
+      <view class="section-title">操作日志</view>
+      <view wx:if="{{!audit.length}}" class="empty">暂无可查看日志。</view>
+      <view wx:for="{{audit}}" wx:key="id" class="list-row">
+        <view class="row-title">{{item.action}} · {{item.actorName}}</view>
+        <view class="row-meta">{{item.createdAtText}} · {{item.target}}</view>
+        <view class="row-meta">{{item.detail}}</view>
+      </view>
+    </block>
+  </view>
+</view>

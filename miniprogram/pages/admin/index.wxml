@@ -1,0 +1,60 @@
+<view class="page">
+  <view class="page-title">人员与数据管理</view>
+  <view class="page-subtitle">仅老板账号可见。人员停用不会破坏历史记录，导入必须先预检查再确认。</view>
+  <view class="tabs">
+    <view class="tab {{tab === 'users' ? 'active' : ''}}" data-tab="users" bindtap="switchTab">人员账号</view>
+    <view class="tab {{tab === 'import' ? 'active' : ''}}" data-tab="import" bindtap="switchTab">数据导入</view>
+  </view>
+
+  <view wx:if="{{tab === 'users'}}" class="section">
+    <view class="row-head">
+      <view class="section-title">团队人员</view>
+      <button class="btn primary small" bindtap="newUser">新增人员</button>
+    </view>
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <view wx:for="{{users}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.name}} · {{item.roleText}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">{{item.id}} · {{item.username}} · {{item.province || item.department}} · 上级{{item.parentName || '无'}}</view>
+      <view class="row-actions top-space">
+        <button class="btn small" data-id="{{item.id}}" bindtap="editUser">修改</button>
+        <button class="btn small" data-id="{{item.id}}" bindtap="toggleUser">{{item.status === '停用' ? '启用' : '停用'}}</button>
+        <button class="btn small" data-id="{{item.id}}" bindtap="resetPassword">重置密码</button>
+        <button wx:if="{{item.boundWechat}}" class="btn small" data-id="{{item.id}}" bindtap="unbindWechat">解绑微信</button>
+        <button class="btn danger small" data-id="{{item.id}}" bindtap="deleteUser">删除</button>
+      </view>
+    </view>
+
+    <view wx:if="{{editing}}" class="subsection">
+      <view class="section-title">{{editing.id ? '修改人员' : '新增人员'}}</view>
+      <view class="field"><text class="label">人员编号</text><input class="input" value="{{editing.id}}" disabled="{{editingExisting}}" data-field="id" bindinput="onEditInput" maxlength="64" /></view>
+      <view class="field"><text class="label">姓名</text><input class="input" value="{{editing.name}}" data-field="name" bindinput="onEditInput" maxlength="50" /></view>
+      <view class="field"><text class="label">角色</text><picker range="{{roles}}" range-key="label" value="{{roleIndex}}" bindchange="selectRole"><view class="picker">{{roles[roleIndex].label}}</view></picker></view>
+      <view class="field"><text class="label">省区/区域</text><input class="input" value="{{editing.province}}" data-field="province" bindinput="onEditInput" maxlength="50" /></view>
+      <view class="field"><text class="label">上级人员编号</text><input class="input" value="{{editing.parentId}}" data-field="parentId" bindinput="onEditInput" maxlength="64" placeholder="总部/经理不填；主管填经理；代表填主管或经理" /></view>
+      <view class="field"><text class="label">登录账号</text><input class="input" value="{{editing.username}}" data-field="username" bindinput="onEditInput" maxlength="64" /></view>
+      <view class="field"><text class="label">临时密码</text><input class="input" password value="{{editing.tempPassword}}" data-field="tempPassword" bindinput="onEditInput" maxlength="128" placeholder="{{editing.id ? '不重置请留空' : '新增人员必填'}}" /></view>
+      <view class="button-stack"><button class="btn primary full" bindtap="saveUser">保存人员</button><button class="btn full" bindtap="cancelEdit">取消</button></view>
+    </view>
+  </view>
+
+  <view wx:else class="section">
+    <view class="section-title">CSV数据导入</view>
+    <view class="hint">请使用系统提供的Excel模板，把对应工作表另存为CSV UTF-8。每次最多1000行、500KB。</view>
+    <view class="field top-space">
+      <text class="label">数据类型</text>
+      <picker range="{{importTypes}}" range-key="label" value="{{importTypeIndex}}" bindchange="selectImportType"><view class="picker">{{importTypes[importTypeIndex].label}}</view></picker>
+    </view>
+    <button class="btn primary full" bindtap="chooseCsv">选择CSV并预检查</button>
+
+    <view wx:if="{{importPreview}}" class="subsection">
+      <view class="section-title">预检查结果</view>
+      <view class="row-meta">{{importPreview.fileName}} · 共{{importPreview.totalRows}}行 · 新增{{importPreview.insertCount}}行 · 更新{{importPreview.updateCount}}行</view>
+      <view wx:if="{{importPreview.errors.length}}" class="danger-text top-space">发现{{importPreview.errors.length}}个错误，必须修改文件后重新预检查。</view>
+      <view wx:for="{{importPreview.errors}}" wx:key="key" class="list-row">
+        <view class="row-title">第{{item.rowNumber}}行 · {{item.field}}</view>
+        <view class="row-meta danger-text">{{item.message}}</view>
+      </view>
+      <button wx:if="{{!importPreview.errors.length}}" class="btn primary full top-space" bindtap="confirmImport">确认正式导入</button>
+    </view>
+  </view>
+</view>

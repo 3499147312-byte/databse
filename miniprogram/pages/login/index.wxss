@@ -1,0 +1,26 @@
+.login-page {
+  padding-top: 80rpx;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  margin-bottom: 44rpx;
+}
+
+.brand-mark {
+  display: grid;
+  width: 92rpx;
+  height: 92rpx;
+  place-items: center;
+  color: #ffffff;
+  background: var(--primary-dark);
+  border-radius: 10rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.login-form {
+  max-width: 680rpx;
+}

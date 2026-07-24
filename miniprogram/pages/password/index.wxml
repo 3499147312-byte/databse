@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="page-title">{{forced ? '首次登录修改密码' : '修改密码'}}</view>
+  <view class="page-subtitle">新密码至少10位，必须同时包含大写字母、小写字母、数字和特殊符号，不能包含账号或姓名。</view>
+  <view class="section">
+    <view class="field">
+      <text class="label">当前密码</text>
+      <input class="input" password value="{{oldPassword}}" data-field="oldPassword" bindinput="onInput" maxlength="128" />
+    </view>
+    <view class="field">
+      <text class="label">新密码</text>
+      <input class="input" password value="{{newPassword}}" data-field="newPassword" bindinput="onInput" maxlength="128" />
+    </view>
+    <view class="field">
+      <text class="label">再次输入新密码</text>
+      <input class="input" password value="{{confirmPassword}}" data-field="confirmPassword" bindinput="onInput" maxlength="128" />
+    </view>
+    <button class="btn primary full" bindtap="submit">确认修改</button>
+  </view>
+</view>

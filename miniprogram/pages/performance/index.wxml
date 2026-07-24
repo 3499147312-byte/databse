@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="page-title">省区月度业绩</view>
+  <view class="page-subtitle">老板专属。只计算已通过且未作废、未退货的正式销售。</view>
+  <view class="tabs">
+    <view class="tab {{selectedMonth === currentMonth ? 'active' : ''}}" data-month="{{currentMonth}}" bindtap="selectMonth">本月 {{currentMonth}}</view>
+    <view class="tab {{selectedMonth === lastMonth ? 'active' : ''}}" data-month="{{lastMonth}}" bindtap="selectMonth">上月 {{lastMonth}}</view>
+  </view>
+
+  <view class="section">
+    <view wx:if="{{loading}}" class="loading">正在汇总省区业绩...</view>
+    <view wx:elif="{{!managers.length}}" class="empty">尚未配置省区经理。</view>
+    <view wx:for="{{managers}}" wx:key="id" wx:for-index="managerIndex" class="list-row">
+      <view class="row-head" data-index="{{managerIndex}}" bindtap="toggleManager">
+        <view>
+          <view class="row-title">第{{item.rank}}名 · {{item.name}}</view>
+          <view class="row-meta">{{item.province || '未配置区域'}} · {{item.qty}}盒 · {{item.warehouses.length}}个仓库</view>
+        </view>
+        <view class="right">
+          <view class="amount">¥{{item.amountText}}</view>
+          <view class="row-meta">{{item.expanded ? '收起' : '查看仓库'}}</view>
+        </view>
+      </view>
+      <view class="row-meta top-space">
+        <text wx:for="{{item.products}}" wx:key="id">{{item.label}} {{item.qty}}盒　</text>
+        <text wx:if="{{!item.products.length}}">本月暂无销量</text>
+      </view>
+      <view wx:if="{{item.expanded}}" class="subsection">
+        <view wx:if="{{!item.warehouses.length}}" class="empty">本月暂无仓库销售。</view>
+        <view wx:for="{{item.warehouses}}" wx:key="id" class="list-row">
+          <view class="row-head"><view class="row-title">{{item.name}}</view><view class="amount">¥{{item.amountText}}</view></view>
+          <view class="row-meta">合计{{item.qty}}盒</view>
+          <view class="row-meta"><text wx:for="{{item.products}}" wx:key="id">{{item.label}} {{item.qty}}盒　</text></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

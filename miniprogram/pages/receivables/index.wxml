@@ -1,0 +1,79 @@
+<view class="page">
+  <view class="page-title">仓库回款</view>
+  <view class="page-subtitle">应回款按正式销售和仓库账期自动生成，支持分次到账、财务确认和撤销留痕。</view>
+
+  <view class="field top-space">
+    <text class="label">查看月份</text>
+    <picker mode="date" fields="month" value="{{month}}" bindchange="changeMonth"><view class="picker">{{month}}</view></picker>
+  </view>
+
+  <view class="metrics">
+    <view class="metric"><text class="metric-label">本月应回</text><text class="metric-value">¥{{summary.dueAmount}}</text></view>
+    <view class="metric"><text class="metric-label">本月实收</text><text class="metric-value">¥{{summary.receivedThisMonth}}</text></view>
+    <view class="metric"><text class="metric-label">到期计划未回</text><text class="metric-value">¥{{summary.outstanding}}</text></view>
+    <view class="metric"><text class="metric-label">当前逾期</text><text class="metric-value">¥{{summary.overdue}}</text></view>
+  </view>
+
+  <view class="tabs">
+    <view class="tab {{tab === 'plans' ? 'active' : ''}}" data-tab="plans" bindtap="switchTab">应收计划</view>
+    <view class="tab {{tab === 'payments' ? 'active' : ''}}" data-tab="payments" bindtap="switchTab">回款明细</view>
+    <view class="tab {{tab === 'terms' ? 'active' : ''}}" data-tab="terms" bindtap="switchTab">仓库账期</view>
+  </view>
+
+  <view wx:if="{{tab === 'plans'}}" class="section">
+    <view class="section-title">月度应收计划</view>
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <view wx:elif="{{!plans.length}}" class="empty">该月份没有到期应收计划。</view>
+    <view wx:for="{{plans}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.warehouseName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">{{item.dueDate}}到期 · {{item.settlementMonth}}销售 · {{item.qty}}盒 · 负责人{{item.managerName || '未配置'}}</view>
+      <view class="row-meta">应回¥{{item.dueAmountText}} · 已回¥{{item.paidAmountText}} · 未回¥{{item.outstandingText}}</view>
+      <button wx:if="{{item.canRecord && item.outstanding > 0}}" class="btn primary small top-space" data-id="{{item.id}}" bindtap="startPayment">{{user.role === 'finance' ? '登记并确认回款' : user.role === 'boss' ? '代登记回款' : '登记回款'}}</button>
+    </view>
+
+    <view wx:if="{{paymentPlan}}" class="subsection">
+      <view class="section-title">登记{{paymentPlan.warehouseName}}回款</view>
+      <view class="hint">对应{{paymentPlan.settlementMonth}}销售，当前未回¥{{paymentPlan.outstandingText}}。</view>
+      <view class="field top-space"><text class="label">本次到账金额</text><input class="input" type="digit" value="{{paymentAmount}}" data-field="paymentAmount" bindinput="onInput" /></view>
+      <view class="field"><text class="label">实际到账日期</text><picker mode="date" value="{{paymentDate}}" bindchange="selectPaymentDate"><view class="picker">{{paymentDate}}</view></picker></view>
+      <view class="field"><text class="label">银行流水号/凭证号</text><input class="input" value="{{paymentReference}}" data-field="paymentReference" bindinput="onInput" maxlength="100" placeholder="可以暂不填写" /></view>
+      <view class="field"><text class="label">回款说明</text><input class="input" value="{{paymentNote}}" data-field="paymentNote" bindinput="onInput" maxlength="200" placeholder="例如：第一次回款" /></view>
+      <view class="button-stack"><button class="btn primary full" bindtap="submitPayment">确认登记</button><button class="btn full" bindtap="cancelPayment">取消</button></view>
+    </view>
+  </view>
+
+  <view wx:elif="{{tab === 'payments'}}" class="section">
+    <view class="section-title">回款登记明细</view>
+    <view wx:if="{{!payments.length}}" class="empty">暂无回款登记。</view>
+    <view wx:for="{{payments}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.warehouseName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">{{item.paymentDate}}到账 · {{item.settlementMonth}}销售 · 登记人{{item.registeredByName}}</view>
+      <view class="row-meta">{{item.reference || '未填流水号'}} · {{item.note}}</view>
+      <view class="row-head top-space">
+        <text class="amount">¥{{item.amountText}}</text>
+        <view class="row-actions">
+          <button wx:if="{{item.canVerify}}" class="btn primary small" data-id="{{item.id}}" bindtap="verifyPayment">{{user.role === 'finance' ? '财务确认' : '核实到账'}}</button>
+          <button wx:if="{{item.canVoid}}" class="btn danger small" data-id="{{item.id}}" bindtap="voidPayment">撤销</button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:else class="section">
+    <view class="section-title">仓库账期设置</view>
+    <view class="hint">到期日=销售月月底+账期自然日。历史月份到期日保留快照，修改只影响当前及以后月份。</view>
+    <view wx:if="{{!warehouseTerms.length}}" class="empty">暂无可查看仓库。</view>
+    <view wx:for="{{warehouseTerms}}" wx:key="id" class="list-row">
+      <view class="row-title">{{item.name}}</view>
+      <view class="row-meta">{{item.province}} · 负责人{{item.managerName || '未配置'}} · 月底+{{item.creditDays}}天</view>
+      <button wx:if="{{user.role === 'boss'}}" class="btn small top-space" data-id="{{item.id}}" bindtap="editTerm">设置账期</button>
+    </view>
+
+    <view wx:if="{{termWarehouse}}" class="subsection">
+      <view class="section-title">设置{{termWarehouse.name}}</view>
+      <view class="field"><text class="label">负责人经理</text><picker range="{{managers}}" range-key="label" value="{{termManagerIndex}}" bindchange="selectTermManager"><view class="picker">{{managers[termManagerIndex].label}}</view></picker></view>
+      <view class="field"><text class="label">账期自然日（0至365）</text><input class="input" type="number" value="{{termCreditDays}}" data-field="termCreditDays" bindinput="onInput" /></view>
+      <view class="button-stack"><button class="btn primary full" bindtap="saveTerm">保存账期</button><button class="btn full" bindtap="cancelTerm">取消</button></view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,44 @@
+<view class="page">
+  <view class="page-title">{{viewMode === 'readOnly' ? '政策与费用查看' : '审核中心'}}</view>
+  <view class="page-subtitle">{{viewMode === 'readOnly' ? '总部审核人员可以查看全部政策和费用，但不能执行审批。' : '系统只显示当前账号有权处理的事项，不能越级或跨区域审批。'}}</view>
+  <view class="tabs">
+    <view wx:if="{{showSales}}" class="tab {{tab === 'sales' ? 'active' : ''}}" data-tab="sales" bindtap="switchTab">销售 {{sales.length}}</view>
+    <view class="tab {{tab === 'expenses' ? 'active' : ''}}" data-tab="expenses" bindtap="switchTab">费用 {{expenses.length}}</view>
+    <view class="tab {{tab === 'policies' ? 'active' : ''}}" data-tab="policies" bindtap="switchTab">政策 {{policies.length}}</view>
+  </view>
+
+  <view class="section">
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <block wx:elif="{{tab === 'sales'}}">
+      <view wx:if="{{!sales.length}}" class="empty">没有待审核销售单。</view>
+      <view wx:for="{{sales}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.customerName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+        <view class="row-meta">{{item.date}} · {{item.repName}} · {{item.lineText}}</view>
+        <view class="row-head top-space"><text class="amount">¥{{item.amountText}}</text><view wx:if="{{item.canAct}}" class="row-actions"><button class="btn danger small" data-action="rejectSale" data-id="{{item.id}}" bindtap="reject">驳回</button><button class="btn primary small" data-action="approveSale" data-id="{{item.id}}" bindtap="approve">通过</button></view></view>
+      </view>
+    </block>
+    <block wx:elif="{{tab === 'expenses'}}">
+      <view wx:if="{{!expenses.length}}" class="empty">{{viewMode === 'readOnly' ? '暂无费用记录。' : '没有待审核费用。'}}</view>
+      <view wx:for="{{expenses}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.repName}} · {{item.type}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+        <view class="row-meta">{{item.date}} · {{item.customerName}} · {{item.note}}</view>
+        <view class="row-meta">付款：{{item.paymentStatus || '未进入财务'}} · 发票：{{item.invoiceStatus || '未进入财务'}}</view>
+        <view class="row-head top-space"><text class="amount">¥{{item.amountText}}</text><view wx:if="{{item.canAct}}" class="row-actions"><button class="btn danger small" data-action="rejectExpense" data-id="{{item.id}}" bindtap="reject">驳回</button><button class="btn primary small" data-action="approveExpense" data-id="{{item.id}}" bindtap="approve">通过</button></view></view>
+      </view>
+    </block>
+    <block wx:else>
+      <view wx:if="{{!policies.length}}" class="empty">{{viewMode === 'readOnly' ? '暂无客户政策记录。' : '没有待老板审核政策。'}}</view>
+      <view wx:for="{{policies}}" wx:key="id" class="list-row">
+        <view class="row-head"><view class="row-title">{{item.customerName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+        <view class="row-meta">{{item.productName}} · {{item.start}}至{{item.end}}</view>
+        <view class="row-meta">开票价¥{{item.invoicePriceText}} · 建议零售价¥{{item.retailPriceText}} · 预计月销{{item.monthlyTarget}}盒</view>
+        <view class="row-meta">总部返利¥{{item.headRebateText}} · 无票返利¥{{item.noInvoiceRebateText}} · 单盒推广开销¥{{item.promoSpendText}}</view>
+        <view wx:if="{{item.hasSpecialCommission}}" class="row-meta">特殊提成：代表¥{{item.repCommissionText}} · 主管¥{{item.supervisorCommissionText}} · 经理¥{{item.managerCommissionText}}</view>
+        <view wx:else class="row-meta">提成：使用系统通用规则</view>
+        <view wx:if="{{item.submittedByName || item.sourceNo}}" class="row-meta">发起人{{item.submittedByName || '未配置'}} · 备案单号{{item.sourceNo || '未填写'}}</view>
+        <view wx:if="{{item.note}}" class="row-meta">说明：{{item.note}}</view>
+        <view wx:if="{{item.canAct}}" class="row-actions top-space"><button class="btn danger small" data-action="rejectPolicy" data-id="{{item.id}}" bindtap="reject">驳回</button><button class="btn primary small" data-action="approvePolicy" data-id="{{item.id}}" bindtap="approve">老板审核通过</button></view>
+      </view>
+    </block>
+  </view>
+</view>

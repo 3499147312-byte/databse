@@ -1,0 +1,40 @@
+<view class="page">
+  <view class="page-title">费用报销</view>
+  <view class="page-subtitle">客情费用与正式销售数量挂钩，待审核费用也会占用额度，不能重复报销。</view>
+
+  <view wx:if="{{canSubmit}}" class="section">
+    <view class="section-title">业务员垫付登记</view>
+    <view class="field">
+      <text class="label">客户</text>
+      <picker range="{{customers}}" range-key="name" value="{{customerIndex}}" bindchange="selectCustomer">
+        <view class="picker">{{customers[customerIndex].name || '请选择客户'}}</view>
+      </picker>
+      <view class="hint top-space">本月当前可用额度：¥{{customers[customerIndex].budgetText || '0.00'}}</view>
+    </view>
+    <view class="field">
+      <text class="label">费用类型</text>
+      <picker range="{{types}}" value="{{typeIndex}}" bindchange="selectType"><view class="picker">{{types[typeIndex]}}</view></picker>
+    </view>
+    <view class="field"><text class="label">报销金额</text><input class="input" type="digit" value="{{amount}}" data-field="amount" bindinput="onInput" /></view>
+    <view class="field"><text class="label">说明</text><textarea class="textarea" value="{{note}}" data-field="note" bindinput="onInput" maxlength="200" placeholder="例如：拜访人民路店购买奶茶" /></view>
+    <button class="btn primary full" bindtap="submit">提交费用审批</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">费用记录</view>
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <view wx:elif="{{!expenses.length}}" class="empty">暂无费用记录。</view>
+    <view wx:for="{{expenses}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.repName}} · {{item.type}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">{{item.date}} · {{item.customerName}} · {{item.note}}</view>
+      <view class="row-meta">付款：{{item.paymentStatus}} · 发票：{{item.invoiceStatus}}</view>
+      <view class="row-head top-space">
+        <text class="amount">¥{{item.amountText}}</text>
+        <view class="row-actions">
+          <button wx:if="{{item.canMarkPaid}}" class="btn primary small" data-action="markExpensePaid" data-id="{{item.id}}" bindtap="financeAction">确认付款</button>
+          <button wx:if="{{item.canMarkInvoiced}}" class="btn small" data-action="markExpenseInvoiced" data-id="{{item.id}}" bindtap="financeAction">确认收票</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

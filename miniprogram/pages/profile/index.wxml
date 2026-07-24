@@ -1,0 +1,17 @@
+<view class="page">
+  <view class="page-title">我的账号</view>
+  <view class="section" wx:if="{{user}}">
+    <view class="list-row">
+      <view class="row-title">{{user.name}}</view>
+      <view class="row-meta">{{roleText}} · {{user.username}}</view>
+    </view>
+    <view class="list-row">
+      <view class="row-title">所属区域</view>
+      <view class="row-meta">{{user.province || user.department || '总部'}}</view>
+    </view>
+    <view class="button-stack top-space">
+      <button class="btn primary full" bindtap="changePassword">修改密码</button>
+      <button class="btn full" bindtap="logout">退出登录</button>
+    </view>
+  </view>
+</view>

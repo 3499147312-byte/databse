@@ -1,0 +1,68 @@
+<view class="page">
+  <view class="page-title">销售日报</view>
+  <view class="page-subtitle">业务代表本人填写，主管和经理逐级审核后才计入正式业绩、库存和提成。</view>
+
+  <view wx:if="{{isRep}}" class="section">
+    <view class="row-head">
+      <view><view class="section-title">今日日报</view><view class="row-meta">{{dailySubmitted ? '已经提交' : '尚未提交'}}</view></view>
+      <text class="badge {{dailySubmitted ? '' : 'danger'}}">{{dailySubmitted ? '已完成' : '待完成'}}</text>
+    </view>
+    <button wx:if="{{!dailySubmitted}}" class="btn full top-space" bindtap="submitZeroDaily">今日无销量，提交零销售日报</button>
+  </view>
+
+  <view wx:if="{{canSubmit}}" class="section">
+    <view class="section-title">填写今日销售</view>
+    <view class="field">
+      <text class="label">客户/门店</text>
+      <picker range="{{stores}}" range-key="label" value="{{storeIndex}}" bindchange="selectStore">
+        <view class="picker">{{stores[storeIndex].label || '请选择门店'}}</view>
+      </picker>
+    </view>
+    <view class="field">
+      <text class="label">产品规格</text>
+      <picker range="{{products}}" range-key="label" value="{{productIndex}}" bindchange="selectProduct">
+        <view class="picker">{{products[productIndex].label || '请选择产品'}}</view>
+      </picker>
+    </view>
+    <view class="field">
+      <text class="label">销售数量（盒）</text>
+      <input class="input" type="number" value="{{qty}}" data-field="qty" bindinput="onInput" placeholder="请输入正整数" />
+    </view>
+    <view class="field">
+      <text class="label">销售批号</text>
+      <input class="input" value="{{batchNo}}" data-field="batchNo" bindinput="onInput" maxlength="50" placeholder="必须是仓库现有有效批号" />
+    </view>
+    <button class="btn full" bindtap="addLine">加入销售清单</button>
+    <view wx:if="{{draftLines.length}}" class="subsection">
+      <view class="section-title">本单产品明细</view>
+      <view wx:for="{{draftLines}}" wx:key="key" class="list-row">
+        <view class="row-head">
+          <view><view class="row-title">{{item.productName}} × {{item.qty}}盒</view><view class="row-meta">批号 {{item.batchNo}}</view></view>
+          <button class="btn danger small" data-index="{{index}}" bindtap="removeLine">删除</button>
+        </view>
+      </view>
+    </view>
+    <button wx:if="{{draftLines.length}}" class="btn primary full top-space" bindtap="submit">整单提交给主管审核</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">销售记录</view>
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <view wx:elif="{{!sales.length}}" class="empty">暂无可查看的销售记录。</view>
+    <view wx:for="{{sales}}" wx:key="id" class="list-row">
+      <view class="row-head">
+        <view class="row-title">{{item.customerName}}</view>
+        <text class="badge {{item.badge}}">{{item.status}}</text>
+      </view>
+      <view class="row-meta">{{item.date}} · {{item.repName}} · {{item.warehouseName}}</view>
+      <view class="row-meta">{{item.lineText}}</view>
+      <view class="row-head top-space">
+        <text class="amount">¥{{item.amountText}}</text>
+        <view wx:if="{{item.canCorrect}}" class="row-actions">
+          <button class="btn small" data-id="{{item.id}}" data-type="退货" bindtap="correct">退货</button>
+          <button class="btn danger small" data-id="{{item.id}}" data-type="作废" bindtap="correct">作废</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

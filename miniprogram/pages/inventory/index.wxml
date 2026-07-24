@@ -1,0 +1,49 @@
+<view class="page">
+  <view class="page-title">库存管理</view>
+  <view class="page-subtitle">商业发货申请作为库存入库，销售最终审核后按仓库、产品和批号扣减库存。</view>
+
+  <view wx:if="{{canReceive}}" class="section">
+    <view class="section-title">登记商业发货入库</view>
+    <view class="field">
+      <text class="label">仓库</text>
+      <picker range="{{warehouses}}" range-key="displayName" value="{{warehouseIndex}}" bindchange="selectWarehouse">
+        <view class="picker">{{warehouses[warehouseIndex].displayName || '请选择仓库'}}</view>
+      </picker>
+    </view>
+    <view class="field">
+      <text class="label">产品规格</text>
+      <picker range="{{products}}" range-key="label" value="{{productIndex}}" bindchange="selectProduct">
+        <view class="picker">{{products[productIndex].label || '请选择产品'}}</view>
+      </picker>
+    </view>
+    <view class="field"><text class="label">入库数量（盒）</text><input class="input" type="number" value="{{qty}}" data-field="qty" bindinput="onInput" /></view>
+    <view class="field"><text class="label">供货单价</text><input class="input" type="digit" value="{{unitPrice}}" data-field="unitPrice" bindinput="onInput" /></view>
+    <view class="field"><text class="label">批号</text><input class="input" value="{{batchNo}}" data-field="batchNo" bindinput="onInput" maxlength="50" /></view>
+    <view class="field">
+      <text class="label">有效期</text>
+      <picker mode="date" value="{{expiryDate}}" bindchange="selectDate"><view class="picker">{{expiryDate || '请选择有效期'}}</view></picker>
+    </view>
+    <button class="btn primary full" bindtap="submit">确认入库</button>
+  </view>
+
+  <view class="section">
+    <view class="section-title">库存余额</view>
+    <view wx:if="{{loading}}" class="loading">正在读取...</view>
+    <view wx:elif="{{!balances.length}}" class="empty">暂无库存资料。</view>
+      <view wx:for="{{balances}}" wx:key="key" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.warehouseName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">责任经理：{{item.managerName}} · {{item.productName}}</view>
+      <view class="amount top-space">{{item.qty}}盒</view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-title">批号效期台账</view>
+    <view wx:if="{{!lots.length}}" class="empty">暂无批号库存。</view>
+    <view wx:for="{{lots}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.warehouseName}} · {{item.productName}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
+      <view class="row-meta">责任经理：{{item.managerName}} · 批号{{item.batchNo}} · 有效期{{item.expiryDate}} · 单价¥{{item.unitPriceText}}</view>
+      <view class="amount top-space">{{item.qty}}盒</view>
+    </view>
+  </view>
+</view>

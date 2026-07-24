@@ -1,0 +1,76 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="loading">正在读取经营数据...</view>
+  <block wx:else>
+    <view class="page-title">{{user.name}}，您好</view>
+    <view class="page-subtitle">{{roleText}} · 所有金额按正式审核数据计算</view>
+
+    <view class="metrics">
+      <view wx:if="{{showSalesMetrics}}" class="metric">
+        <text class="metric-label">今日销售额</text>
+        <text class="metric-value">¥{{metrics.todaySales}}</text>
+      </view>
+      <view wx:if="{{showSalesMetrics}}" class="metric">
+        <text class="metric-label">本月销售额</text>
+        <text class="metric-value">¥{{metrics.monthSales}}</text>
+      </view>
+      <view wx:if="{{showCommissionMetrics}}" class="metric">
+        <text class="metric-label">今日提成</text>
+        <text class="metric-value">¥{{metrics.todayCommission}}</text>
+      </view>
+      <view wx:if="{{showCommissionMetrics}}" class="metric">
+        <text class="metric-label">本月提成</text>
+        <text class="metric-value">¥{{metrics.monthCommission}}</text>
+      </view>
+      <view wx:if="{{showReceivableMetrics}}" class="metric">
+        <text class="metric-label">本月应回款</text>
+        <text class="metric-value">¥{{metrics.monthDue}}</text>
+      </view>
+      <view wx:if="{{showReceivableMetrics}}" class="metric">
+        <text class="metric-label">本月已到账</text>
+        <text class="metric-value">¥{{metrics.monthReceived}}</text>
+      </view>
+      <view wx:if="{{showDailyMetric}}" class="metric">
+        <text class="metric-label">未填日报</text>
+        <text class="metric-value">{{metrics.missingDaily}}人</text>
+      </view>
+      <view class="metric">
+        <text class="metric-label">待处理</text>
+        <text class="metric-value">{{metrics.pending}}条</text>
+      </view>
+    </view>
+
+    <view wx:if="{{showReceivableMetrics}}" class="section">
+      <view class="section-title">仓库回款提醒</view>
+      <view class="hint">到期前3天开始提醒，逾期未结清会持续显示。</view>
+      <view wx:if="{{!reminders.length}}" class="empty">当前没有三日内到期或逾期回款。</view>
+      <view wx:for="{{reminders}}" wx:key="id" class="list-row">
+        <view class="row-head">
+          <view class="row-title">{{item.warehouseName}}</view>
+          <text class="badge {{item.badge}}">{{item.status}}</text>
+        </view>
+        <view class="row-meta">{{item.dueDate}}到期 · {{item.settlementMonth}}销售 · 负责人{{item.managerName || '未配置'}}</view>
+        <view class="row-meta">应回¥{{item.dueAmountText}} · 已回¥{{item.paidAmountText}} · 未回¥{{item.outstandingText}}</view>
+        <button class="btn primary small top-space" data-id="{{item.id}}" bindtap="openReceivable">{{user.role === 'finance' ? '查看并确认' : user.role === 'boss' ? '查看并代登记' : '登记回款'}}</button>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">工作入口</view>
+      <view class="menu-grid">
+        <view wx:for="{{menus}}" wx:key="key" class="menu-item" data-url="{{item.url}}" bindtap="openMenu">{{item.label}}</view>
+      </view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">今日管理提醒</view>
+      <view wx:if="{{!tasks.length}}" class="empty">当前没有待办事项。</view>
+      <view wx:for="{{tasks}}" wx:key="key" class="list-row">
+        <view class="row-head">
+          <view class="row-title">{{item.title}}</view>
+          <text class="badge {{item.level}}">{{item.value}}</text>
+        </view>
+        <view class="row-meta">{{item.detail}}</view>
+      </view>
+    </view>
+  </block>
+</view>

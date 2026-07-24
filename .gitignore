@@ -1,0 +1,10 @@
+node_modules/
+project.private.config.json
+cloudfunctions/api/seed/accounts.json
+cloudfunctions/api/seed/accounts.private.json
+docs/~$*
+*.log
+*.zip
+.DS_Store
+Thumbs.db
+

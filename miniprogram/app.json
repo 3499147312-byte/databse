@@ -1,0 +1,26 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/home/index",
+    "pages/password/index",
+    "pages/sales/index",
+    "pages/approvals/index",
+    "pages/inventory/index",
+    "pages/receivables/index",
+    "pages/expenses/index",
+    "pages/reports/index",
+    "pages/performance/index",
+    "pages/admin/index",
+    "pages/profile/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "国康直营管理",
+    "navigationBarBackgroundColor": "#173B36",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F4F7F6",
+    "backgroundTextStyle": "dark"
+  },
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "../sitemap.json"
+}
