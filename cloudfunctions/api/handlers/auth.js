@@ -42,12 +42,12 @@ async function ensureCollections() {
   }
 }
 
-async function bootstrap(payload) {
+async function bootstrap(payload, seedAccounts = accounts) {
   if (!config.setupCode || config.setupCode.includes("请改成") || config.setupCode.includes("CHANGE_ME")) {
     fail("SETUP_CODE_NOT_CHANGED", "请先修改云函数 api/config.js 中的一次性初始化码，再重新部署云函数。");
   }
   if (payload.setupCode !== config.setupCode) fail("INVALID_SETUP_CODE", "一次性初始化码不正确。");
-  if (!accounts.length) {
+  if (!seedAccounts.length) {
     fail("ACCOUNT_SEED_MISSING", "缺少私有初始账号文件，不能执行全新环境初始化。");
   }
   await ensureCollections();
@@ -56,7 +56,7 @@ async function bootstrap(payload) {
   if (initialized?.completed || count.total > 0) fail("ALREADY_INITIALIZED", "系统已经初始化，不能重复执行。");
 
   let usersCreated = 0;
-  for (const account of accounts) {
+  for (const account of seedAccounts) {
     const personId = account.personId || "";
     await setDoc("users", account.id, {
       personId,

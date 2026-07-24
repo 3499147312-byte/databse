@@ -3,6 +3,6 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "test": "node tests/core.test.js && node tests/core-extended.test.js && node tests/csv.test.js && node tests/context-permissions.test.js && node tests/domain.test.js && node scripts/validate-project.js"
+    "test": "node tests/run-all.js"
   }
 }
