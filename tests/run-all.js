@@ -11,6 +11,7 @@ const files = [
   "tests/context-permissions.test.js",
   "tests/context-security.test.js",
   "tests/permissions-v12.test.js",
+  "tests/permissions-v12-flow-coverage.test.js",
   "tests/domain.test.js",
   "tests/handler-auth.test.js",
   "tests/handler-sales-inventory.test.js",
