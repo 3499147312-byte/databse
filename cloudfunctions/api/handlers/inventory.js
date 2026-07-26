@@ -5,7 +5,8 @@ const {
   fetchAll,
   getDoc,
   requireUser,
-  assertRole,
+  assertPermission,
+  hasPermission,
   writeAudit,
   withIdempotency,
   userBusinessId,
@@ -23,7 +24,7 @@ const { lotId, visibleWarehouses, mapById } = require("../lib/domain");
 
 async function getInventoryPage() {
   const user = await requireUser();
-  assertRole(user, ["rep", "supervisor", "manager", "boss"]);
+  assertPermission(user, "inventory.view");
   const warehouses = await visibleWarehouses(user);
   const warehouseIds = warehouses.map((item) => item._id);
   const products = await fetchAll("products", { status: command.neq("停用") });
@@ -51,7 +52,7 @@ async function getInventoryPage() {
     };
   }));
   return {
-    canReceive: ["manager", "boss"].includes(user.role),
+    canReceive: hasPermission(user, "inventory.receive"),
     warehouses: warehouses.map((item) => ({
       id: item._id,
       name: item.name,
@@ -79,9 +80,9 @@ async function getInventoryPage() {
 
 async function receiveInventory(payload) {
   const user = await requireUser();
-  assertRole(user, ["manager", "boss"]);
+  assertPermission(user, "inventory.receive");
   return withIdempotency(user, payload.idempotencyKey, "receiveInventory", async () => {
-    const visible = await visibleWarehouses(user);
+    const visible = await visibleWarehouses(user, "inventory.receive");
     const warehouse = visible.find((item) => item._id === payload.warehouseId);
     const product = await getDoc("products", payload.productId);
     if (!warehouse || !warehouse.managerId || !product || product.status === "停用") {

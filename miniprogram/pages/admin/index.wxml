@@ -2,30 +2,32 @@
   <view class="page-title">人员与数据管理</view>
   <view class="page-subtitle">仅老板账号可见。人员停用不会破坏历史记录，导入必须先预检查再确认。</view>
   <view class="tabs">
-    <view class="tab {{tab === 'users' ? 'active' : ''}}" data-tab="users" bindtap="switchTab">人员账号</view>
-    <view class="tab {{tab === 'import' ? 'active' : ''}}" data-tab="import" bindtap="switchTab">数据导入</view>
+    <view wx:if="{{canViewUsers}}" class="tab {{tab === 'users' ? 'active' : ''}}" data-tab="users" bindtap="switchTab">人员账号</view>
+    <view wx:if="{{canImport}}" class="tab {{tab === 'import' ? 'active' : ''}}" data-tab="import" bindtap="switchTab">数据导入</view>
   </view>
 
   <view wx:if="{{tab === 'users'}}" class="section">
     <view class="row-head">
       <view class="section-title">团队人员</view>
-      <button class="btn primary small" bindtap="newUser">新增人员</button>
+      <button wx:if="{{canAdd}}" class="btn primary small" bindtap="newUser">新增人员</button>
     </view>
     <view wx:if="{{loading}}" class="loading">正在读取...</view>
     <view wx:for="{{users}}" wx:key="id" class="list-row">
       <view class="row-head"><view class="row-title">{{item.name}} · {{item.roleText}}</view><text class="badge {{item.badge}}">{{item.status}}</text></view>
       <view class="row-meta">{{item.id}} · {{item.username}} · {{item.province || item.department}} · 上级{{item.parentName || '无'}}</view>
       <view class="row-actions top-space">
-        <button class="btn small" data-id="{{item.id}}" bindtap="editUser">修改</button>
-        <button class="btn small" data-id="{{item.id}}" bindtap="toggleUser">{{item.status === '停用' ? '启用' : '停用'}}</button>
-        <button class="btn small" data-id="{{item.id}}" bindtap="resetPassword">重置密码</button>
-        <button wx:if="{{item.boundWechat}}" class="btn small" data-id="{{item.id}}" bindtap="unbindWechat">解绑微信</button>
-        <button class="btn danger small" data-id="{{item.id}}" bindtap="deleteUser">删除</button>
+        <button wx:if="{{item.canEdit}}" class="btn small" data-id="{{item.id}}" bindtap="editUser">修改</button>
+        <button wx:if="{{item.canToggle}}" class="btn small" data-id="{{item.id}}" bindtap="toggleUser">{{item.status === '停用' ? '启用' : '停用'}}</button>
+        <button wx:if="{{item.canReset}}" class="btn small" data-id="{{item.id}}" bindtap="resetPassword">重置密码</button>
+        <button wx:if="{{item.canUnbind && item.boundWechat}}" class="btn small" data-id="{{item.id}}" bindtap="unbindWechat">解绑微信</button>
+        <button wx:if="{{item.canDelete}}" class="btn danger small" data-id="{{item.id}}" bindtap="deleteUser">删除</button>
       </view>
     </view>
 
-    <view wx:if="{{editing}}" class="subsection">
-      <view class="section-title">{{editing.id ? '修改人员' : '新增人员'}}</view>
+    <view wx:if="{{editing}}" class="editor-mask">
+      <view class="editor-dialog">
+      <view class="editor-scroll">
+      <view class="section-title">{{editingExisting ? '修改人员' : '新增人员'}}</view>
       <view class="field"><text class="label">人员编号</text><input class="input" value="{{editing.id}}" disabled="{{editingExisting}}" data-field="id" bindinput="onEditInput" maxlength="64" /></view>
       <view class="field"><text class="label">姓名</text><input class="input" value="{{editing.name}}" data-field="name" bindinput="onEditInput" maxlength="50" /></view>
       <view class="field"><text class="label">角色</text><picker range="{{roles}}" range-key="label" value="{{roleIndex}}" bindchange="selectRole"><view class="picker">{{roles[roleIndex].label}}</view></picker></view>
@@ -33,7 +35,9 @@
       <view class="field"><text class="label">上级人员编号</text><input class="input" value="{{editing.parentId}}" data-field="parentId" bindinput="onEditInput" maxlength="64" placeholder="总部/经理不填；主管填经理；代表填主管或经理" /></view>
       <view class="field"><text class="label">登录账号</text><input class="input" value="{{editing.username}}" data-field="username" bindinput="onEditInput" maxlength="64" /></view>
       <view class="field"><text class="label">临时密码</text><input class="input" password value="{{editing.tempPassword}}" data-field="tempPassword" bindinput="onEditInput" maxlength="128" placeholder="{{editing.id ? '不重置请留空' : '新增人员必填'}}" /></view>
-      <view class="button-stack"><button class="btn primary full" bindtap="saveUser">保存人员</button><button class="btn full" bindtap="cancelEdit">取消</button></view>
+      </view>
+      <view class="editor-actions"><button class="btn full" bindtap="cancelEdit">取消</button><button class="btn primary full" bindtap="saveUser">保存人员</button></view>
+      </view>
     </view>
   </view>
 

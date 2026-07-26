@@ -12,7 +12,8 @@ const actionGroups = {
   expenses: ["getExpensesPage", "submitExpense", "approveExpense", "rejectExpense", "markExpensePaid", "markExpenseInvoiced"],
   receivables: ["getReceivables", "recordWarehousePayment", "verifyWarehousePayment", "voidWarehousePayment", "updateWarehouseTerm"],
   reports: ["getReports", "getBossPerformance", "submitWeekly", "approvePolicy", "rejectPolicy"],
-  admin: ["getAdminPage", "saveUser", "toggleUser", "resetUserPassword", "unbindUserWechat", "deleteUser", "adminImportRows"]
+  admin: ["getAdminPage", "saveUser", "toggleUser", "resetUserPassword", "unbindUserWechat", "deleteUser", "adminImportRows"],
+  permissions: ["getPermissionCenter", "savePermissionRole", "savePermissionAdmin", "saveUserPermissions", "reviewPermissionRequest", "saveApprovalDelegation", "migratePermissions"]
 };
 const allActions = Object.values(actionGroups).flat();
 
@@ -36,8 +37,8 @@ function injectHandler(name, actions) {
   delete require.cache[require.resolve(indexPath)];
   const api = require(indexPath);
 
-  // API-ROUTE-01：37个公开动作全部路由到对应处理函数并原样传递payload。
-  assert.strictEqual(allActions.length, 37);
+  // API-ROUTE-01：44个公开动作全部路由到对应处理函数并原样传递payload。
+  assert.strictEqual(allActions.length, 44);
   for (const action of allActions) {
     const result = await api.main({ action, payload: { testId: action } });
     assert.strictEqual(result.ok, true, action);
@@ -81,9 +82,9 @@ function injectHandler(name, actions) {
   assert.strictEqual(internal.message, "系统暂时无法处理，请稍后重试或联系管理员。");
   assert(!JSON.stringify(internal).includes("数据库内部敏感错误"));
 
-  // UI-CONTRACT-01：12个页面均有脚本、模板和配置，并且全部云端动作存在于API路由。
+  // UI-CONTRACT-01：13个页面均有脚本、模板和配置，并且全部云端动作存在于API路由。
   const app = JSON.parse(fs.readFileSync(path.join(root, "miniprogram", "app.json"), "utf8"));
-  assert.strictEqual(app.pages.length, 12);
+  assert.strictEqual(app.pages.length, 13);
   for (const page of app.pages) {
     for (const extension of [".js", ".json", ".wxml"]) {
       assert(fs.existsSync(path.join(root, "miniprogram", `${page}${extension}`)), `${page}${extension}`);
@@ -101,7 +102,7 @@ function injectHandler(name, actions) {
   const notReachable = allActions.filter((action) => !uiActions.has(action));
   assert.deepStrictEqual(notReachable, []);
 
-  console.log("API路由与12页面契约测试通过");
+  console.log("API路由与13页面契约测试通过");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

@@ -18,6 +18,9 @@ Page({
     loading: true,
     tab: "users",
     users: [],
+    canViewUsers: false,
+    canAdd: false,
+    canImport: false,
     editing: null,
     editingExisting: false,
     roles: [
@@ -42,6 +45,10 @@ Page({
       const data = await call("getAdminPage", {}, { loading: false });
       this.setData({
         loading: false,
+        tab: data.canViewUsers ? this.data.tab : "import",
+        canViewUsers: Boolean(data.canViewUsers),
+        canAdd: Boolean(data.canAdd),
+        canImport: Boolean(data.canImport),
         users: (data.users || []).map((item) => ({
           ...item,
           roleText: roleLabel(item.role),

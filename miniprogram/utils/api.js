@@ -23,7 +23,7 @@ async function call(action, payload = {}, options = {}) {
     if (!result.ok) {
       const error = new Error(result.message || "云端处理失败");
       error.code = result.code;
-      if (result.code === "AUTH_REQUIRED") {
+      if (["AUTH_REQUIRED", "REAUTH_REQUIRED"].includes(result.code)) {
         wx.removeStorageSync("gk_user");
         app.globalData.user = null;
         wx.reLaunch({ url: "/pages/login/index" });

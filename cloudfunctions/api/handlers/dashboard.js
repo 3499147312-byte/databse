@@ -2,8 +2,10 @@ const {
   command,
   fetchAll,
   requireUser,
-  assertRole,
-  scopeWhere,
+  assertPermission,
+  assertAnyPermission,
+  hasPermission,
+  activeApprovalDelegation,
   userBusinessId,
   safeUser
 } = require("../lib/context");
@@ -22,19 +24,36 @@ const {
 const { ensureWeeklyTasks, isoWeek } = require("./reports");
 
 async function visibleReps(user) {
-  const id = userBusinessId(user);
-  if (user.role === "boss") return fetchAll("users", { role: "rep", disabled: false });
-  if (user.role === "manager") return fetchAll("users", { role: "rep", managerId: id, disabled: false });
-  if (user.role === "supervisor") return fetchAll("users", { role: "rep", supervisorId: id, disabled: false });
-  return user.role === "rep" ? [user] : [];
+  const reps = await fetchAll("users", { role: "rep", disabled: false });
+  return reps.filter((item) => hasPermission(user, "sales.view", {
+    ...item,
+    repId: userBusinessId(item),
+    ownerId: userBusinessId(item)
+  }));
+}
+
+async function pendingApprovalRows(user, collectionName, businessType) {
+  const rows = await fetchAll(collectionName, { status: command.in(["待主管审核", "待经理审核"]) }, { max: 3000 });
+  const result = [];
+  for (const item of rows) {
+    const stage = item.status === "待主管审核" ? "supervisor" : "manager";
+    const permission = `${businessType}.approve.${stage}`;
+    if (hasPermission(user, permission, item) && item[`${stage}Id`] === userBusinessId(user)) {
+      result.push(item);
+      continue;
+    }
+    if (await activeApprovalDelegation(user, item, businessType, stage)) result.push(item);
+  }
+  return result;
 }
 
 async function getDashboard() {
   const user = await requireUser();
-  if (["supervisor", "manager", "boss"].includes(user.role)) await ensureWeeklyTasks(user);
+  assertPermission(user, "dashboard.view");
+  if (hasPermission(user, "reports.weekly.submit") || user.role === "boss") await ensureWeeklyTasks(user);
   const today = localDate();
   const month = monthKey(today);
-  const hasSalesScope = ["rep", "supervisor", "manager", "boss"].includes(user.role);
+  const hasSalesScope = hasPermission(user, "sales.view");
   const sales = hasSalesScope
     ? await scopedRows("sales", user, {
         status: "已通过",
@@ -53,7 +72,7 @@ async function getDashboard() {
   const commissionTotal = (items) => commissionField
     ? calc4(items.reduce((sum, item) => sum + Number(calcSale(item)[commissionField] || 0), 0))
     : 0;
-  const reps = await visibleReps(user);
+  const reps = hasSalesScope ? await visibleReps(user) : [];
   const repIds = reps.map((item) => userBusinessId(item));
   const reports = repIds.length
     ? await fetchAll("daily_reports", { date: today, repId: command.in(repIds), submitted: true })
@@ -61,34 +80,48 @@ async function getDashboard() {
   const submitted = new Set(reports.map((item) => item.repId));
   const missing = reps.filter((item) => !submitted.has(userBusinessId(item)));
 
-  const pendingSales = hasSalesScope
-    ? await scopedRows("sales", user, { status: command.in(["待主管审核", "待经理审核"]) }, { max: 1000 })
+  const visiblePendingSales = hasPermission(user, "sales.view")
+    ? await scopedRows("sales", user, { status: command.in(["待主管审核", "待经理审核"]) }, { max: 1000 }, "sales.view")
     : [];
-  const pendingExpenses = hasSalesScope
-    ? await scopedRows("expenses", user, { status: command.in(["待主管审核", "待经理审核"]) }, { max: 1000 })
+  const actionableSales = hasPermission(user, "sales.approve.supervisor") || hasPermission(user, "sales.approve.manager")
+    ? await pendingApprovalRows(user, "sales", "sales")
     : [];
-  const pendingPolicies = user.role === "boss" ? await fetchAll("policies", { status: "待老板审核" }) : [];
-  const pendingPayments = ["boss", "finance"].includes(user.role)
-    ? await fetchAll("warehouse_payments", { status: command.in(["待老板核实", "待财务确认"]) })
+  const pendingSales = [...new Map([...visiblePendingSales, ...actionableSales].map((item) => [item._id, item])).values()];
+  const visiblePendingExpenses = hasPermission(user, "expenses.view")
+    ? await scopedRows("expenses", user, { status: command.in(["待主管审核", "待经理审核"]) }, { max: 1000 }, "expenses.view")
     : [];
-  const financeExpenses = user.role === "finance"
-    ? await fetchAll("expenses", { status: "已通过" }, { max: 1000 })
+  const actionableExpenses = hasPermission(user, "expenses.approve.supervisor") || hasPermission(user, "expenses.approve.manager")
+    ? await pendingApprovalRows(user, "expenses", "expenses")
     : [];
-  const visiblePolicies = user.role === "hq_auditor" ? await fetchAll("policies", {}, { max: 3000 }) : [];
-  const visibleExpenses = user.role === "hq_auditor" ? await fetchAll("expenses", {}, { max: 3000 }) : [];
+  const pendingExpenses = [...new Map([...visiblePendingExpenses, ...actionableExpenses].map((item) => [item._id, item])).values()];
+  const pendingPolicies = hasPermission(user, "policies.approve") || hasPermission(user, "policies.reject")
+    ? (await fetchAll("policies", { status: "待老板审核" })).filter((item) =>
+      hasPermission(user, "policies.approve", item) || hasPermission(user, "policies.reject", item))
+    : [];
+  const pendingPayments = hasPermission(user, "receivables.verify")
+    ? (await fetchAll("warehouse_payments", { status: command.in(["待老板核实", "待财务确认"]) }))
+      .filter((item) => hasPermission(user, "receivables.verify", item))
+    : [];
+  const financeExpenses = hasPermission(user, "expenses.pay") || hasPermission(user, "expenses.invoice")
+    ? (await fetchAll("expenses", { status: "已通过" }, { max: 1000 }))
+      .filter((item) => hasPermission(user, "expenses.pay", item) || hasPermission(user, "expenses.invoice", item))
+    : [];
+  const visiblePolicies = hasPermission(user, "policies.view")
+    ? (await fetchAll("policies", {}, { max: 3000 })).filter((item) => hasPermission(user, "policies.view", item))
+    : [];
+  const visibleExpenses = hasPermission(user, "expenses.view")
+    ? (await fetchAll("expenses", {}, { max: 3000 })).filter((item) => hasPermission(user, "expenses.view", item))
+    : [];
 
   let monthDue = 0;
   let monthReceived = 0;
   let reminders = [];
-  if (["boss", "manager", "finance"].includes(user.role)) {
-    const where = ["boss", "finance"].includes(user.role) ? {} : { managerId: userBusinessId(user) };
-    const receivables = await fetchAll("receivables", where);
+  if (hasPermission(user, "receivables.view")) {
+    const receivables = (await fetchAll("receivables", {})).filter((item) => hasPermission(user, "receivables.view", item));
     const decorated = await decorateReceivables(user, receivables);
     monthDue = decorated.filter((item) => monthKey(item.dueDate) === month).reduce((sum, item) => sum + item.dueAmount, 0);
-    const payments = await fetchAll("warehouse_payments", {
-      ...where,
-      status: command.neq("已作废")
-    });
+    const payments = (await fetchAll("warehouse_payments", { status: command.neq("已作废") }))
+      .filter((item) => hasPermission(user, "receivables.view", item));
     monthReceived = payments.filter((item) => monthKey(item.paymentDate) === month).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     reminders = decorated
       .filter((item) => item.outstanding > 0 && daysBetween(today, item.dueDate) <= 3)
@@ -98,7 +131,7 @@ async function getDashboard() {
   let weeklyPending = [];
   if (user.role === "boss") {
     weeklyPending = await fetchAll("weekly_reports", { week: isoWeek(), status: "未提交" });
-  } else if (["supervisor", "manager"].includes(user.role)) {
+  } else if (hasPermission(user, "reports.weekly.submit")) {
     weeklyPending = await fetchAll("weekly_reports", { week: isoWeek(), ownerId: userBusinessId(user), status: "未提交" });
   }
   const localWeekday = new Date(`${today}T00:00:00+08:00`).getDay();
@@ -126,7 +159,16 @@ async function getDashboard() {
       level: weeklyLevel
     }
   ];
-  if (user.role === "hq_auditor") {
+  const hasApprovalActions = [
+    "sales.approve.supervisor",
+    "sales.approve.manager",
+    "expenses.approve.supervisor",
+    "expenses.approve.manager",
+    "policies.approve",
+    "receivables.verify"
+  ].some((code) => hasPermission(user, code));
+  const readOnlyHeadquarters = !hasApprovalActions && !hasPermission(user, "sales.view") && (visiblePolicies.length || visibleExpenses.length);
+  if (readOnlyHeadquarters) {
     tasks.splice(0, tasks.length,
       {
         key: "policy-view",
@@ -142,7 +184,7 @@ async function getDashboard() {
         detail: "可查看全部费用申请，不具有审批权限",
         level: ""
       });
-  } else if (user.role === "finance") {
+  } else if (financeExpenses.length || pendingPayments.length) {
     const financePending = financeExpenses.filter((item) => item.paymentStatus !== "已付款" || item.invoiceStatus === "待收票").length;
     tasks.splice(0, tasks.length,
       {
@@ -171,7 +213,7 @@ async function getDashboard() {
       monthDue: calc4(monthDue),
       monthReceived: calc4(monthReceived),
       missingDaily: missing.length,
-      pending: user.role === "hq_auditor"
+      pending: readOnlyHeadquarters
         ? 0
         : user.role === "finance"
           ? financeExpenses.filter((item) => item.paymentStatus !== "已付款" || item.invoiceStatus === "待收票").length + pendingPayments.length
@@ -184,24 +226,30 @@ async function getDashboard() {
 
 async function getApprovals() {
   const user = await requireUser();
-  assertRole(user, ["supervisor", "manager", "boss", "hq_auditor"]);
-  const id = userBusinessId(user);
-  let sales = [];
-  let expenses = [];
-  if (user.role === "supervisor") {
-    sales = await fetchAll("sales", { supervisorId: id, status: "待主管审核" });
-    expenses = await fetchAll("expenses", { supervisorId: id, status: "待主管审核" });
-  } else if (user.role === "manager") {
-    sales = await fetchAll("sales", { managerId: id, status: "待经理审核" });
-    expenses = await fetchAll("expenses", { managerId: id, status: "待经理审核" });
-  } else if (user.role === "hq_auditor") {
-    expenses = await fetchAll("expenses", {}, { max: 3000, orderBy: { field: "createdAt", direction: "desc" } });
-  }
-  const policies = user.role === "boss"
-    ? await fetchAll("policies", { status: "待老板审核" })
-    : user.role === "hq_auditor"
-      ? await fetchAll("policies", {}, { max: 3000, orderBy: { field: "createdAt", direction: "desc" } })
+  assertAnyPermission(user, [
+    "sales.approve.supervisor",
+    "sales.approve.manager",
+    "expenses.approve.supervisor",
+    "expenses.approve.manager",
+    "expenses.view",
+    "policies.view",
+    "policies.approve",
+    "policies.reject"
+  ]);
+  const canApproveSales = hasPermission(user, "sales.approve.supervisor") || hasPermission(user, "sales.approve.manager");
+  const canApproveExpenses = hasPermission(user, "expenses.approve.supervisor") || hasPermission(user, "expenses.approve.manager");
+  const sales = canApproveSales ? await pendingApprovalRows(user, "sales", "sales") : [];
+  const expenses = canApproveExpenses
+    ? await pendingApprovalRows(user, "expenses", "expenses")
+    : hasPermission(user, "expenses.view")
+      ? (await fetchAll("expenses", {}, { max: 3000, orderBy: { field: "createdAt", direction: "desc" } }))
+        .filter((item) => hasPermission(user, "expenses.view", item))
       : [];
+  const canReviewPolicies = hasPermission(user, "policies.approve") || hasPermission(user, "policies.reject");
+  const policies = hasPermission(user, "policies.view") && (canReviewPolicies || user.role === "hq_auditor")
+    ? (await fetchAll("policies", {}, { max: 3000, orderBy: { field: "createdAt", direction: "desc" } }))
+      .filter((item) => hasPermission(user, "policies.view", item))
+    : [];
   const customerMap = await mapById("customers", [
     ...sales.map((item) => item.customerId),
     ...expenses.map((item) => item.customerId),
@@ -222,7 +270,7 @@ async function getApprovals() {
       lineText: (sale.lines || []).map((line) => `${productMap.get(line.productId)?.spec || line.productId} × ${line.qty}盒 · 批号${line.batchNo}`).join("；"),
       amount: calcSale(sale).amount,
       status: sale.status,
-      canAct: ["supervisor", "manager"].includes(user.role)
+      canAct: canApproveSales
     })),
     expenses: expenses.map((item) => ({
       id: item._id,
@@ -235,7 +283,7 @@ async function getApprovals() {
       status: item.status,
       paymentStatus: item.paymentStatus,
       invoiceStatus: item.invoiceStatus,
-      canAct: ["supervisor", "manager"].includes(user.role)
+      canAct: canApproveExpenses
     })),
     policies: policies.map((item) => ({
       id: item._id,
@@ -258,9 +306,14 @@ async function getApprovals() {
       start: item.start,
       end: item.end,
       status: item.status,
-      canAct: user.role === "boss"
+      canApprove: hasPermission(user, "policies.approve", item),
+      canReject: hasPermission(user, "policies.reject", item),
+      canAct: hasPermission(user, "policies.approve", item) || hasPermission(user, "policies.reject", item)
     })),
-    viewMode: user.role === "hq_auditor" ? "readOnly" : "approval"
+    viewMode: canApproveSales || canApproveExpenses || policies.some((item) =>
+      hasPermission(user, "policies.approve", item) || hasPermission(user, "policies.reject", item))
+      ? "approval"
+      : "readOnly"
   };
 }
 

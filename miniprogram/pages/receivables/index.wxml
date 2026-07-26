@@ -66,7 +66,7 @@
     <view wx:for="{{warehouseTerms}}" wx:key="id" class="list-row">
       <view class="row-title">{{item.name}}</view>
       <view class="row-meta">{{item.province}} · 负责人{{item.managerName || '未配置'}} · 月底+{{item.creditDays}}天</view>
-      <button wx:if="{{user.role === 'boss'}}" class="btn small top-space" data-id="{{item.id}}" bindtap="editTerm">设置账期</button>
+      <button wx:if="{{canSetTerm}}" class="btn small top-space" data-id="{{item.id}}" bindtap="editTerm">设置账期</button>
     </view>
 
     <view wx:if="{{termWarehouse}}" class="subsection">

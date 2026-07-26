@@ -6,6 +6,7 @@ const expenses = require("./handlers/expenses");
 const receivables = require("./handlers/receivables");
 const reports = require("./handlers/reports");
 const admin = require("./handlers/admin");
+const permissions = require("./handlers/permissions");
 
 const actions = Object.freeze({
   bootstrap: auth.bootstrap,
@@ -44,7 +45,14 @@ const actions = Object.freeze({
   resetUserPassword: admin.resetUserPassword,
   unbindUserWechat: admin.unbindUserWechat,
   deleteUser: admin.deleteUser,
-  adminImportRows: admin.adminImportRows
+  adminImportRows: admin.adminImportRows,
+  getPermissionCenter: permissions.getPermissionCenter,
+  savePermissionRole: permissions.savePermissionRole,
+  savePermissionAdmin: permissions.savePermissionAdmin,
+  saveUserPermissions: permissions.saveUserPermissions,
+  reviewPermissionRequest: permissions.reviewPermissionRequest,
+  saveApprovalDelegation: permissions.saveApprovalDelegation,
+  migratePermissions: permissions.migratePermissions
 });
 
 exports.main = async (event) => {

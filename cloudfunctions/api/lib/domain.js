@@ -5,9 +5,10 @@ const {
   fetchAll,
   getDoc,
   setDoc,
-  updateDoc,
   scopeWhere,
   canSeeScoped,
+  hasPermission,
+  assertPermission,
   userBusinessId,
   fail
 } = require("./context");
@@ -45,7 +46,12 @@ async function mapById(collectionName, ids) {
   return result;
 }
 
-async function visibleStores(user) {
+async function visibleStores(user, permission = "sales.view") {
+  if (user._authorization) {
+    assertPermission(user, permission);
+    const rows = await fetchAll("stores", { status: command.neq("停用") });
+    return rows.filter((item) => hasPermission(user, permission, item));
+  }
   const id = userBusinessId(user);
   if (user.role === "rep") {
     if (!user.managerId) return [];
@@ -57,14 +63,33 @@ async function visibleStores(user) {
   return fetchAll("stores", { [field]: id, status: command.neq("停用") });
 }
 
-async function visibleWarehouses(user) {
+async function visibleWarehouses(user, permission = "inventory.view") {
+  if (user._authorization) {
+    assertPermission(user, permission);
+    const rows = await fetchAll("warehouses", { status: command.neq("停用") });
+    return rows.filter((item) => hasPermission(user, permission, item));
+  }
   if (user.role === "boss") return fetchAll("warehouses", { status: command.neq("停用") });
   const managerId = warehouseManagerIdForUser(user);
   if (!managerId) return [];
   return fetchAll("warehouses", { managerId, status: command.neq("停用") });
 }
 
-async function visibleCustomers(user) {
+async function visibleCustomers(user, permission = "policies.view") {
+  if (user._authorization) {
+    assertPermission(user, permission);
+    const [customers, stores] = await Promise.all([
+      fetchAll("customers", { status: command.neq("停用") }),
+      fetchAll("stores", { status: command.neq("停用") })
+    ]);
+    const repStoreCustomerIds = new Set(
+      stores.filter((store) => store.repId === userBusinessId(user)).map((store) => store.customerId)
+    );
+    return customers.filter((item) => {
+      if (hasPermission(user, permission, item)) return true;
+      return user.role === "rep" && repStoreCustomerIds.has(item._id) && hasPermission(user, permission, { ...item, repId: userBusinessId(user) });
+    });
+  }
   const id = userBusinessId(user);
   if (user.role === "boss") return fetchAll("customers", { status: command.neq("停用") });
   if (user.role === "manager") return fetchAll("customers", { managerId: id, status: command.neq("停用") });
@@ -76,7 +101,21 @@ async function visibleCustomers(user) {
   return fetchAll("customers", { _id: command.in(ids), status: command.neq("停用") });
 }
 
-async function scopedRows(collectionName, user, extraWhere = {}, options = {}) {
+async function scopedRows(collectionName, user, extraWhere = {}, options = {}, permission = "") {
+  if (user._authorization) {
+    const inferred = permission || {
+      sales: "sales.view",
+      expenses: "expenses.view",
+      policies: "policies.view",
+      receivables: "receivables.view",
+      warehouse_payments: "receivables.view",
+      audit_logs: "reports.audit.view"
+    }[collectionName];
+    if (!inferred) return [];
+    assertPermission(user, inferred);
+    const rows = await fetchAll(collectionName, extraWhere, options);
+    return rows.filter((item) => hasPermission(user, inferred, item));
+  }
   if (user.role === "boss") return fetchAll(collectionName, extraWhere, options);
   const scope = scopeWhere(user);
   if (!scope) return [];
@@ -162,7 +201,9 @@ async function decorateReceivables(user, rows) {
   });
   const missingPaidRows = rows.filter((item) => item.paidAmount === undefined);
   const totals = missingPaidRows.length ? await activePaymentTotals(missingPaidRows.map((item) => item._id)) : new Map();
-  return rows.filter((item) => user.role === "finance" || canSeeScoped(user, item)).map((item) => {
+  return rows.filter((item) => user._authorization
+    ? hasPermission(user, "receivables.view", item)
+    : user.role === "finance" || canSeeScoped(user, item)).map((item) => {
     const paidAmount = calc4(item.paidAmount === undefined ? totals.get(item._id) || 0 : item.paidAmount);
     const outstanding = calc4(Math.max(0, Number(item.dueAmount || 0) - paidAmount));
     return {
@@ -178,7 +219,9 @@ async function decorateReceivables(user, rows) {
       paidAmount,
       outstanding,
       status: receivableStatus(item, paidAmount),
-      canRecord: ["boss", "manager", "finance"].includes(user.role)
+      canRecord: user._authorization
+        ? hasPermission(user, "receivables.record", item)
+        : ["boss", "manager", "finance"].includes(user.role)
     };
   });
 }

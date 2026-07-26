@@ -9,7 +9,9 @@ const {
   updateDoc,
   findUserByBusinessId,
   requireUser,
-  assertRole,
+  assertPermission,
+  assertAnyPermission,
+  hasPermission,
   writeAudit,
   userBusinessId,
   safeUser,
@@ -30,6 +32,7 @@ const {
   calc4
 } = require("../lib/core");
 const { lotId, rebuildReceivable } = require("../lib/domain");
+const { permissionRoleIdForPosition } = require("../lib/permissions");
 
 const STATUS_VALUES = new Set(["启用", "停用"]);
 const CHANNEL_VALUES = new Set(["连锁药店", "单体药店", "诊所", "民营医院", "社区卫生院", "其他"]);
@@ -79,13 +82,23 @@ function publicUser(user, peopleMap) {
 
 async function getAdminPage() {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertAnyPermission(actor, ["admin.users.view", "admin.import"]);
   const users = await fetchAll("users", {}, { max: 3000 });
   const peopleMap = new Map(users.map((item) => [userBusinessId(item), item]));
   return {
+    canViewUsers: hasPermission(actor, "admin.users.view"),
+    canAdd: hasPermission(actor, "admin.users.manage"),
+    canImport: hasPermission(actor, "admin.import"),
     users: users
-      .filter((item) => item.role !== "boss")
-      .map((item) => publicUser(item, peopleMap))
+      .filter((item) => item.role !== "boss" && hasPermission(actor, "admin.users.view", item))
+      .map((item) => ({
+        ...publicUser(item, peopleMap),
+        canEdit: hasPermission(actor, "admin.users.manage", item),
+        canToggle: hasPermission(actor, "admin.users.toggle", item),
+        canReset: hasPermission(actor, "admin.users.reset", item),
+        canUnbind: hasPermission(actor, "admin.users.unbind", item),
+        canDelete: hasPermission(actor, "admin.users.delete", item)
+      }))
       .sort((a, b) => `${a.province}|${a.role}|${a.name}`.localeCompare(`${b.province}|${b.role}|${b.name}`, "zh-CN"))
   };
 }
@@ -109,7 +122,7 @@ async function resolveHierarchy(role, parentId) {
 
 async function saveUser(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.users.manage");
   const personId = clean(payload.id);
   const username = clean(payload.username);
   const name = clean(payload.name);
@@ -121,15 +134,27 @@ async function saveUser(payload) {
   if (!["hq_auditor", "finance", "manager", "supervisor", "rep"].includes(role)) fail("INVALID_ROLE", "人员角色不正确。");
   const existing = await findUserByBusinessId(personId);
   if (existing?.role === "boss") fail("BOSS_PROTECTED", "老板账号不能在这里修改。");
+  if (existing) assertPermission(actor, "admin.users.manage", existing);
   const duplicate = await db.collection("users").where({ usernameLower: username.toLowerCase() }).limit(2).get();
   if (duplicate.data.some((item) => item._id !== existing?._id)) fail("USERNAME_EXISTS", "这个登录账号已经被其他人使用。");
   const hierarchy = await resolveHierarchy(role, clean(payload.parentId));
+  const id = existing?._id || hashId("acct", personId);
+  if (!existing) {
+    assertPermission(actor, "admin.users.manage", {
+      _id: id,
+      personId,
+      role,
+      province,
+      department: province,
+      ...hierarchy,
+      managerId: role === "manager" ? personId : hierarchy.managerId
+    });
+  }
   const tempPassword = String(payload.tempPassword || "");
   if (!existing && !tempPassword) fail("TEMP_PASSWORD_REQUIRED", "新增人员必须填写临时密码。");
   if (tempPassword && !validPassword(tempPassword, { username, name })) {
     fail("WEAK_PASSWORD", "临时密码至少10位，并包含大小写字母、数字和特殊符号，且不能包含账号或姓名。");
   }
-  const id = existing?._id || hashId("acct", personId);
   const record = {
     ...(existing || {}),
     personId,
@@ -140,6 +165,11 @@ async function saveUser(payload) {
     province,
     department: province,
     ...hierarchy,
+    permissionRoleId: !existing || String(existing.permissionRoleId || "").startsWith("builtin_")
+      ? permissionRoleIdForPosition(role)
+      : existing.permissionRoleId,
+    permissionVersion: Number(existing?.permissionVersion || 0) + 1,
+    reauthRequired: Boolean(existing?.reauthRequired),
     disabled: existing?.disabled || false,
     mustChangePassword: tempPassword ? true : Boolean(existing?.mustChangePassword),
     failedAttempts: 0,
@@ -156,9 +186,10 @@ async function saveUser(payload) {
 
 async function toggleUser(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.users.toggle");
   const target = await findUserByBusinessId(clean(payload.userId));
   if (!target || target.role === "boss" || target._id === actor._id) fail("USER_PROTECTED", "该账号不存在或不能停用。");
+  assertPermission(actor, "admin.users.toggle", target);
   await updateDoc("users", target._id, {
     disabled: !target.disabled,
     failedAttempts: 0,
@@ -171,9 +202,10 @@ async function toggleUser(payload) {
 
 async function resetUserPassword(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.users.reset");
   const target = await findUserByBusinessId(clean(payload.userId));
   if (!target || target.role === "boss") fail("USER_PROTECTED", "该账号不存在或不能由这里重置。");
+  assertPermission(actor, "admin.users.reset", target);
   const password = temporaryPassword();
   await updateDoc("users", target._id, {
     ...newPasswordRecord(password, config.passwordIterations),
@@ -189,9 +221,10 @@ async function resetUserPassword(payload) {
 
 async function unbindUserWechat(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.users.unbind");
   const target = await findUserByBusinessId(clean(payload.userId));
   if (!target || target.role === "boss") fail("USER_PROTECTED", "该账号不存在或不能由这里解绑。");
+  assertPermission(actor, "admin.users.unbind", target);
   if (!target.openid) return { boundWechat: false };
   await updateDoc("users", target._id, {
     openid: "",
@@ -209,9 +242,10 @@ async function dependencyCount(collectionName, where) {
 
 async function deleteUser(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.users.delete");
   const target = await findUserByBusinessId(clean(payload.userId));
   if (!target || target.role === "boss" || target._id === actor._id) fail("USER_PROTECTED", "该账号不存在或不能删除。");
+  assertPermission(actor, "admin.users.delete", target);
   const id = userBusinessId(target);
   const checks = [
     ["下属人员", "users", command.or([{ managerId: id }, { supervisorId: id }])],
@@ -347,6 +381,7 @@ function validatePersonnel(rows, maps, errors) {
     if (!validCode(row.username)) addError(errors, row.rowNumber, "登录账号", "登录账号只能使用2至64位字母、数字、点、横线或下划线。");
     if (!STATUS_VALUES.has(row.status)) addError(errors, row.rowNumber, "状态", "状态只能填写启用或停用。");
     const current = maps.people.get(row.id) || maps.usernames.get(String(row.username).toLowerCase());
+    if (current?.role === "boss") addError(errors, row.rowNumber, "人员编号", "老板账号受系统保护，不能通过人员导入修改。");
     if (!current && !row.tempPassword) addError(errors, row.rowNumber, "临时密码", "新增人员必须填写临时密码。");
     if (row.tempPassword && !validPassword(row.tempPassword, { username: row.username, name: row.name })) addError(errors, row.rowNumber, "临时密码", "至少10位，必须含大小写字母、数字和特殊符号，且不能包含账号或姓名。");
     const usernameKey = String(row.username).toLowerCase();
@@ -630,6 +665,7 @@ async function commitImport(type, rows, maps, actor) {
     rows.forEach((row) => combinedPeople.set(row.id, row));
     for (const row of rows) {
       const existing = maps.people.get(row.id) || maps.usernames.get(String(row.username).toLowerCase());
+      if (existing?.role === "boss") fail("BOSS_PROTECTED", "老板账号不能通过人员导入修改。");
       const parent = row.role === "rep" ? combinedPeople.get(row.parentId) : null;
       const identityChanged = Boolean(existing && existing.name && existing.name !== row.name);
       const record = {
@@ -641,6 +677,11 @@ async function commitImport(type, rows, maps, actor) {
         role: row.role,
         province: row.province,
         department: row.province,
+        permissionRoleId: !existing || String(existing.permissionRoleId || "").startsWith("builtin_")
+          ? permissionRoleIdForPosition(row.role)
+          : existing.permissionRoleId,
+        permissionVersion: Number(existing?.permissionVersion || 0) + 1,
+        reauthRequired: Boolean(existing?.reauthRequired),
         managerId: ["manager", "hq_auditor", "finance"].includes(row.role) ? "" : row.role === "supervisor" ? row.parentId : parent?.role === "manager" ? row.parentId : parent?.managerId || parent?.parentId || "",
         supervisorId: row.role === "rep" && parent?.role === "supervisor" ? row.parentId : "",
         openid: identityChanged ? "" : existing?.openid || "",
@@ -761,7 +802,7 @@ async function commitImport(type, rows, maps, actor) {
 
 async function adminImportRows(payload) {
   const actor = await requireUser();
-  assertRole(actor, ["boss"]);
+  assertPermission(actor, "admin.import");
   const type = clean(payload.type);
   const sourceRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (!IMPORT_HEADERS[type]) fail("INVALID_IMPORT_TYPE", "导入的数据类型不正确。");
@@ -772,6 +813,39 @@ async function adminImportRows(payload) {
   validateCommonIds(type, rows, errors);
   const maps = await loadMasterMaps();
   validateRowsByType(type, rows, maps, errors);
+  for (const row of rows) {
+    let scopeItem = row;
+    if (type === "personnel") {
+      const parent = maps.people.get(row.parentId);
+      scopeItem = {
+        _id: row.id,
+        personId: row.id,
+        role: row.role,
+        province: row.province,
+        managerId: row.role === "manager"
+          ? row.id
+          : row.role === "supervisor"
+            ? row.parentId
+            : parent?.role === "manager"
+              ? row.parentId
+              : parent?.managerId || ""
+      };
+    } else if (type === "warehouses") {
+      scopeItem = { _id: row.id, warehouseId: row.id, managerId: row.managerId, province: row.province, creditDays: row.creditDays };
+    } else if (type === "customers") {
+      scopeItem = { _id: row.id, customerId: row.id, managerId: row.managerId, province: row.province, channel: row.channel };
+    } else if (type === "stores") {
+      const customer = maps.customers.get(row.customerId);
+      scopeItem = { _id: row.id, customerId: row.customerId, warehouseId: row.warehouseId, repId: row.repId, managerId: customer?.managerId || "" };
+    } else if (type === "inventory") {
+      const warehouse = maps.warehouses.get(row.warehouseId);
+      scopeItem = { warehouseId: row.warehouseId, managerId: warehouse?.managerId || "", province: warehouse?.province || "" };
+    } else if (type === "policies" || type === "historicalSales") {
+      const customer = maps.customers.get(row.customerId);
+      scopeItem = { customerId: row.customerId, warehouseId: row.warehouseId || "", repId: row.repId || "", managerId: customer?.managerId || "", province: customer?.province || "" };
+    }
+    assertPermission(actor, "admin.import", scopeItem);
+  }
   if (type === "historicalSales") validateHistoricalGroups(rows, errors);
   await projectedInventoryErrors(type, rows, errors);
   const existingIds = await existingImportIds(type, rows, maps);

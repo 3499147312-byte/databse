@@ -13,7 +13,7 @@ module.exports = [
   { id: "SALE-04", manualHeading: "### 4. 退货和作废", testCases: ["SALES-CORRECT-01"], ui: ["miniprogram/pages/sales/index.wxml", "作废"] },
   { id: "APP-01", manualHeading: "### 1. 主管", testCases: ["APPROVALS-01"], ui: ["miniprogram/pages/approvals/index.wxml", "审核中心"] },
   { id: "APP-02", manualHeading: "### 2. 经理", testCases: ["APPROVALS-01", "FLOW-SALES-01"], ui: ["miniprogram/pages/approvals/index.wxml", "销售"] },
-  { id: "APP-03", manualHeading: "### 3. 老板", testCases: ["POLICY-APPROVE-01", "POLICY-REJECT-01"], ui: ["miniprogram/pages/approvals/index.wxml", "老板审核通过"] },
+  { id: "APP-03", manualHeading: "### 3. 老板", testCases: ["POLICY-APPROVE-01", "POLICY-REJECT-01"], ui: ["miniprogram/pages/approvals/index.wxml", "审核通过"] },
   { id: "APP-04", manualHeading: "### 4. 总部审核人员", testCases: ["APPROVALS-02", "DASHBOARD-03"], ui: ["miniprogram/pages/approvals/index.wxml", "政策与费用查看"] },
   { id: "APP-05", manualHeading: "### 5. 驳回要求", testCases: ["SALES-REJECT-01", "EXPENSE-REJECT-01", "POLICY-REJECT-01"], ui: ["miniprogram/pages/approvals/index.wxml", "驳回"] },
   { id: "INV-01", manualHeading: "### 1. 查看库存", testCases: ["INVENTORY-PAGE-01", "REPORTS-01"], ui: ["miniprogram/pages/inventory/index.wxml", "库存余额"] },
@@ -40,5 +40,16 @@ module.exports = [
   { id: "ADMIN-05", manualHeading: "### 5. 解绑微信", testCases: ["ADMIN-UNBIND-01"], ui: ["miniprogram/pages/admin/index.wxml", "解绑微信"] },
   { id: "ADMIN-06", manualHeading: "### 6. 删除人员", testCases: ["ADMIN-DELETE-01"], ui: ["miniprogram/pages/admin/index.wxml", "删除"] },
   { id: "IMPORT-01", manualHeading: "### 通用操作", testCases: ["IMPORT-01", "IMPORT-02"], ui: ["miniprogram/pages/admin/index.wxml", "选择CSV并预检查"] },
-  { id: "IMPORT-02", manualHeading: "### 推荐导入顺序", testCases: ["IMPORT-01"], ui: ["miniprogram/pages/admin/index.js", "historicalSales"] }
+  { id: "IMPORT-02", manualHeading: "### 推荐导入顺序", testCases: ["IMPORT-01"], ui: ["miniprogram/pages/admin/index.js", "historicalSales"] },
+  { id: "PERMISSION-MIGRATE-01", manualHeading: "## 2. 老板使用权限中心", testCases: ["PERMISSION-MIGRATE-01"], ui: ["miniprogram/pages/permissions/index.wxml", "执行/复查V1.2权限迁移"] },
+  { id: "PERMISSION-ROLE-01", manualHeading: "## 2. 老板使用权限中心", testCases: ["PERMISSION-ROLE-01"], ui: ["miniprogram/pages/permissions/index.wxml", "角色模板"] },
+  { id: "PERMISSION-USER-01", manualHeading: "## 3. 个人权限调整", testCases: ["PERMISSION-USER-01"], ui: ["miniprogram/pages/permissions/index.wxml", "保存/提交权限调整"] },
+  { id: "PERMISSION-SCOPE-01", manualHeading: "## 3. 个人权限调整", testCases: ["PERMISSION-SCOPE-01"], ui: ["miniprogram/pages/permissions/index.wxml", "指定仓库编号"] },
+  { id: "PERMISSION-ADMIN-01", manualHeading: "## 4. 权限管理员", testCases: ["PERMISSION-ADMIN-01"], ui: ["miniprogram/pages/permissions/index.wxml", "保存权限管理员"] },
+  { id: "PERMISSION-REQUEST-01", manualHeading: "## 5. 高危权限", testCases: ["PERMISSION-REQUEST-01"], ui: ["miniprogram/pages/permissions/index.wxml", "高危授权申请"] },
+  { id: "PERMISSION-REVOKE-01", manualHeading: "## 5. 高危权限", testCases: ["PERMISSION-REVOKE-01"], ui: ["miniprogram/utils/api.js", "REAUTH_REQUIRED"] },
+  { id: "PERMISSION-EXPIRY-01", manualHeading: "## 8. 常见提示", testCases: ["PERMISSION-EXPIRY-01"], ui: ["miniprogram/pages/permissions/index.wxml", "截止时间"] },
+  { id: "DELEGATION-01", manualHeading: "## 6. 审批代理", testCases: ["DELEGATION-01"], ui: ["miniprogram/pages/permissions/index.wxml", "保存审批代理"] },
+  { id: "DELEGATION-RACE-01", manualHeading: "## 6. 审批代理", testCases: ["DELEGATION-RACE-01"], ui: ["miniprogram/pages/permissions/index.wxml", "先处理者生效"] },
+  { id: "UI-PERSON-01", manualHeading: "## 7. 其他业务功能", testCases: ["UI-PERSON-01"], ui: ["miniprogram/pages/admin/index.wxml", "editor-actions"] }
 ];

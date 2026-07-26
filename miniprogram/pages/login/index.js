@@ -42,7 +42,10 @@ Page({
   finishLogin(user) {
     wx.setStorageSync("gk_user", user);
     getApp().globalData.user = user;
-    wx.reLaunch({ url: user.mustChangePassword ? "/pages/password/index?forced=1" : "/pages/home/index" });
+    const next = !Array.isArray(user.capabilities) || user.capabilities.includes("dashboard.view")
+      ? "/pages/home/index"
+      : "/pages/profile/index";
+    wx.reLaunch({ url: user.mustChangePassword ? "/pages/password/index?forced=1" : next });
   },
 
   async initialize() {

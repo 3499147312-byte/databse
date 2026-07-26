@@ -11,6 +11,7 @@
     "pages/reports/index",
     "pages/performance/index",
     "pages/admin/index",
+    "pages/permissions/index",
     "pages/profile/index"
   ],
   "window": {

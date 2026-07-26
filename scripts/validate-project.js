@@ -70,7 +70,9 @@ const requiredActions = [
   "markExpensePaid", "markExpenseInvoiced", "getReceivables", "recordWarehousePayment",
   "verifyWarehousePayment", "voidWarehousePayment", "updateWarehouseTerm", "getReports", "getBossPerformance",
   "submitWeekly", "approvePolicy", "rejectPolicy", "getAdminPage", "saveUser", "toggleUser",
-  "resetUserPassword", "unbindUserWechat", "deleteUser", "adminImportRows"
+  "resetUserPassword", "unbindUserWechat", "deleteUser", "adminImportRows",
+  "getPermissionCenter", "savePermissionRole", "savePermissionAdmin", "saveUserPermissions",
+  "reviewPermissionRequest", "saveApprovalDelegation", "migratePermissions"
 ];
 for (const action of requiredActions) {
   if (!new RegExp(`\\b${action}:`).test(routerSource)) errors.push(`云函数总入口缺少操作: ${action}`);

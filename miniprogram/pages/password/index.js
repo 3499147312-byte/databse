@@ -26,6 +26,9 @@ Page({
     wx.setStorageSync("gk_user", data.user);
     getApp().globalData.user = data.user;
     wx.showToast({ title: "密码已修改", icon: "success" });
-    setTimeout(() => wx.reLaunch({ url: "/pages/home/index" }), 500);
+    const next = !Array.isArray(data.user.capabilities) || data.user.capabilities.includes("dashboard.view")
+      ? "/pages/home/index"
+      : "/pages/profile/index";
+    setTimeout(() => wx.reLaunch({ url: next }), 500);
   }
 });

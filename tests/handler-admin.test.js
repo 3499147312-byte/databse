@@ -316,6 +316,19 @@ function importRows() {
       dryRun: true
     });
     assert(missingHeaders.errors.some((item) => item.field === "表头"));
+    const bossRow = {
+      ...importRows().personnel,
+      "人员编号*": "BOSS",
+      "姓名*": "修改老板",
+      "登录账号*": "boss-import",
+      "临时密码": ""
+    };
+    const bossPreview = await admin.adminImportRows({
+      type: "personnel",
+      rows: [{ rowNumber: 2, values: bossRow }],
+      dryRun: true
+    });
+    assert(bossPreview.errors.some((item) => item.message.includes("老板账号受系统保护")));
   }
 
   console.log("老板人员管理与八类批量导入测试通过");

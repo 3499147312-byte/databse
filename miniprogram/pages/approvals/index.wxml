@@ -37,7 +37,7 @@
         <view wx:else class="row-meta">提成：使用系统通用规则</view>
         <view wx:if="{{item.submittedByName || item.sourceNo}}" class="row-meta">发起人{{item.submittedByName || '未配置'}} · 备案单号{{item.sourceNo || '未填写'}}</view>
         <view wx:if="{{item.note}}" class="row-meta">说明：{{item.note}}</view>
-        <view wx:if="{{item.canAct}}" class="row-actions top-space"><button class="btn danger small" data-action="rejectPolicy" data-id="{{item.id}}" bindtap="reject">驳回</button><button class="btn primary small" data-action="approvePolicy" data-id="{{item.id}}" bindtap="approve">老板审核通过</button></view>
+        <view wx:if="{{item.canAct}}" class="row-actions top-space"><button wx:if="{{item.canReject}}" class="btn danger small" data-action="rejectPolicy" data-id="{{item.id}}" bindtap="reject">驳回</button><button wx:if="{{item.canApprove}}" class="btn primary small" data-action="approvePolicy" data-id="{{item.id}}" bindtap="approve">审核通过</button></view>
       </view>
     </block>
   </view>

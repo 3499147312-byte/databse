@@ -1,4 +1,5 @@
 const assert = require("assert");
+const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
@@ -56,6 +57,14 @@ function loadPage(pageName, call) {
     assert.deepStrictEqual(actions.removed, ["gk_user"]);
     assert.strictEqual(app.globalData.user, null);
     assert.deepStrictEqual(actions.relaunch, [{ url: "/pages/login/index" }]);
+  }
+
+  // UI-PERSON-01：人员编辑使用固定操作区，不需要滚动到页面底部保存。
+  {
+    const wxml = fs.readFileSync(path.join(root, "miniprogram", "pages", "admin", "index.wxml"), "utf8");
+    const wxss = fs.readFileSync(path.join(root, "miniprogram", "pages", "admin", "index.wxss"), "utf8");
+    assert(wxml.includes("editor-mask") && wxml.includes("editor-actions"));
+    assert(wxss.includes("position: fixed") && wxss.includes(".editor-actions"));
   }
 
   // PASSWORD-PAGE-01：改密页面校验三个输入框，成功后保存安全用户并回首页。

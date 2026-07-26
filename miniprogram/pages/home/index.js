@@ -2,18 +2,25 @@ const { call } = require("../../utils/api");
 const { money, roleLabel, badgeClass } = require("../../utils/format");
 
 const allMenus = [
-  { key: "sales", label: "销售日报", url: "/pages/sales/index", roles: ["rep", "supervisor", "manager", "boss"] },
-  { key: "approvals", label: "审核中心", url: "/pages/approvals/index", roles: ["supervisor", "manager", "boss"] },
+  { key: "sales", label: "销售日报", url: "/pages/sales/index", any: ["sales.view"] },
+  { key: "approvals", label: "审核中心", url: "/pages/approvals/index", any: ["sales.approve.supervisor", "sales.approve.manager", "expenses.approve.supervisor", "expenses.approve.manager", "policies.approve", "policies.reject"] },
   { key: "hq-view", label: "政策与费用", url: "/pages/approvals/index", roles: ["hq_auditor"] },
-  { key: "inventory", label: "库存管理", url: "/pages/inventory/index", roles: ["rep", "supervisor", "manager", "boss"] },
-  { key: "receivables", label: "仓库回款", url: "/pages/receivables/index", roles: ["manager", "boss", "finance"] },
-  { key: "expenses", label: "费用报销", url: "/pages/expenses/index", roles: ["rep", "supervisor", "manager", "boss"] },
-  { key: "finance-expenses", label: "费用财务", url: "/pages/expenses/index", roles: ["finance"] },
-  { key: "reports", label: "经营报表", url: "/pages/reports/index", roles: ["rep", "supervisor", "manager", "boss"] },
-  { key: "performance", label: "省区月度业绩", url: "/pages/performance/index", roles: ["boss"] },
-  { key: "admin", label: "人员与导入", url: "/pages/admin/index", roles: ["boss"] },
-  { key: "profile", label: "我的账号", url: "/pages/profile/index", roles: ["rep", "supervisor", "manager", "boss", "hq_auditor", "finance"] }
+  { key: "inventory", label: "库存管理", url: "/pages/inventory/index", any: ["inventory.view"] },
+  { key: "receivables", label: "仓库回款", url: "/pages/receivables/index", any: ["receivables.view"] },
+  { key: "expenses", label: "费用管理", url: "/pages/expenses/index", any: ["expenses.view"] },
+  { key: "reports", label: "经营报表", url: "/pages/reports/index", any: ["reports.view"] },
+  { key: "performance", label: "省区月度业绩", url: "/pages/performance/index", any: ["performance.view"] },
+  { key: "admin", label: "人员与导入", url: "/pages/admin/index", any: ["admin.users.view", "admin.import"] },
+  { key: "permissions", label: "权限中心", url: "/pages/permissions/index", any: ["permissions.center.view"] },
+  { key: "profile", label: "我的账号", url: "/pages/profile/index", always: true }
 ];
+
+function canOpen(menu, user) {
+  const capabilities = new Set(user.capabilities || []);
+  return menu.always
+    || (menu.roles || []).includes(user.role)
+    || (menu.any || []).some((code) => capabilities.has(code));
+}
 
 Page({
   data: {
@@ -39,6 +46,7 @@ Page({
     try {
       const data = await call("getDashboard", {}, { loading: false });
       const user = data.user;
+      const capabilities = new Set(user.capabilities || []);
       wx.setStorageSync("gk_user", user);
       getApp().globalData.user = user;
       if (user.mustChangePassword) {
@@ -49,11 +57,11 @@ Page({
         loading: false,
         user,
         roleText: roleLabel(user.role),
-        showSalesMetrics: ["rep", "supervisor", "manager", "boss"].includes(user.role),
-        showCommissionMetrics: ["rep", "supervisor", "manager"].includes(user.role),
-        showReceivableMetrics: ["manager", "boss", "finance"].includes(user.role),
-        showDailyMetric: ["supervisor", "manager", "boss"].includes(user.role),
-        menus: allMenus.filter((item) => item.roles.includes(user.role)),
+        showSalesMetrics: capabilities.has("sales.view"),
+        showCommissionMetrics: capabilities.has("sales.view") && ["rep", "supervisor", "manager"].includes(user.role),
+        showReceivableMetrics: capabilities.has("receivables.view"),
+        showDailyMetric: capabilities.has("sales.view") && user.role !== "rep",
+        menus: allMenus.filter((item) => canOpen(item, user)),
         metrics: {
           todaySales: money(data.metrics.todaySales),
           monthSales: money(data.metrics.monthSales),

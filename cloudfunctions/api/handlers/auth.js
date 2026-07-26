@@ -19,6 +19,8 @@ const {
   updateDoc,
   findUserByOpenid,
   requireUser,
+  attachAuthorization,
+  ensureBuiltinPermissionRoles,
   writeAudit,
   safeUser,
   fail
@@ -51,6 +53,7 @@ async function bootstrap(payload, seedAccounts = accounts) {
     fail("ACCOUNT_SEED_MISSING", "缺少私有初始账号文件，不能执行全新环境初始化。");
   }
   await ensureCollections();
+  await ensureBuiltinPermissionRoles();
   const initialized = await getDoc("settings", "bootstrap");
   const count = await db.collection("users").count();
   if (initialized?.completed || count.total > 0) fail("ALREADY_INITIALIZED", "系统已经初始化，不能重复执行。");
@@ -64,6 +67,9 @@ async function bootstrap(payload, seedAccounts = accounts) {
       usernameLower: String(account.username).toLowerCase(),
       name: account.name,
       role: account.role,
+      permissionRoleId: `builtin_${account.role}`,
+      permissionVersion: 1,
+      reauthRequired: false,
       department: account.department || "",
       province: account.province || provinceFromDepartment(account.department),
       workNo: account.workNo || "",
@@ -97,7 +103,8 @@ async function bootstrap(payload, seedAccounts = accounts) {
     completed: true,
     completedAt: nowIso(),
     accountCount: usersCreated,
-    version: "1.1.0"
+    version: "1.2.0",
+    permissionSchemaVersion: 1
   });
   await writeAudit(null, "系统初始化", "bootstrap", `创建${usersCreated}个账号和${products.length}个产品规格`);
   return { usersCreated, productsCreated: products.length };
@@ -132,9 +139,16 @@ async function login(payload) {
     openid: OPENID,
     failedAttempts: 0,
     lockedUntil: 0,
+    reauthRequired: false,
     lastLoginAt: nowIso()
   });
-  const updated = { ...user, openid: OPENID, failedAttempts: 0, lockedUntil: 0 };
+  const updated = await attachAuthorization({
+    ...user,
+    openid: OPENID,
+    failedAttempts: 0,
+    lockedUntil: 0,
+    reauthRequired: false
+  });
   await writeAudit(updated, "账号登录", user._id, "微信小程序登录成功");
   return { user: safeUser(updated) };
 }

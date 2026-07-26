@@ -107,7 +107,11 @@ function safeUser(user) {
     managerId: user.managerId || "",
     supervisorId: user.supervisorId || "",
     status: user.disabled ? "停用" : "启用",
-    mustChangePassword: Boolean(user.mustChangePassword)
+    mustChangePassword: Boolean(user.mustChangePassword),
+    permissionRoleId: user.permissionRoleId || "",
+    permissionRoleName: user._authorization?.roleName || "",
+    permissionVersion: Number(user.permissionVersion || 0),
+    capabilities: user._authorization?.codes || []
   };
 }
 

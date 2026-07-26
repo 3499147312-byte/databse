@@ -1,0 +1,112 @@
+<view class="page">
+  <view class="page-title">权限中心</view>
+  <view class="page-subtitle">岗位决定审批链，权限角色与个人调整决定可用动作和数据范围。</view>
+  <button wx:if="{{isBoss}}" class="btn small top-space" bindtap="migrate">执行/复查V1.2权限迁移</button>
+  <view class="tabs">
+    <view wx:for="{{tabs}}" wx:key="key" class="tab {{tab === item.key ? 'active' : ''}}" data-tab="{{item.key}}" bindtap="switchTab">{{item.label}}</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading">正在读取权限配置...</view>
+
+  <view wx:elif="{{tab === 'roles'}}" class="section">
+    <view class="row-head"><view class="section-title">权限角色模板</view><button wx:if="{{isBoss}}" class="btn primary small" bindtap="newRole">新建自定义角色</button></view>
+    <view wx:for="{{roles}}" wx:key="id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.name}}</view><text class="badge">{{item.builtin ? '内置' : '自定义'}} · {{item.status}}</text></view>
+      <view class="row-meta">{{item.grants.length}}项权限 · {{item.id}}</view>
+      <button wx:if="{{isBoss && item.id !== 'builtin_boss'}}" class="btn small top-space" data-id="{{item.id}}" bindtap="editRole">修改模板</button>
+    </view>
+  </view>
+
+  <view wx:elif="{{tab === 'users'}}" class="section">
+    <view class="section-title">人员权限调整</view>
+    <view class="field"><text class="label">人员</text><picker range="{{users}}" range-key="name" value="{{userIndex}}" data-field="userIndex" bindchange="selectIndex"><view class="picker">{{users[userIndex].name}} · {{users[userIndex].roleText}}</view></picker></view>
+    <view wx:if="{{isBoss}}" class="field"><text class="label">绑定权限角色</text><picker range="{{roles}}" range-key="name" value="{{roleIndex}}" data-field="roleIndex" bindchange="selectIndex"><view class="picker">{{roles[roleIndex].name}}</view></picker></view>
+    <view class="field"><text class="label">权限动作</text><picker range="{{definitions}}" range-key="label" value="{{permissionIndex}}" data-field="permissionIndex" bindchange="selectIndex"><view class="picker">{{definitions[permissionIndex].label}} · {{definitions[permissionIndex].code}}</view></picker></view>
+    <view class="field"><text class="label">调整模式</text><picker range="{{modes}}" range-key="label" value="{{modeIndex}}" data-field="modeIndex" bindchange="selectIndex"><view class="picker">{{modes[modeIndex].label}}</view></picker></view>
+    <view class="field"><text class="label">权限范围</text><picker range="{{scopes}}" range-key="label" value="{{scopeIndex}}" data-field="scopeIndex" bindchange="selectIndex"><view class="picker">{{scopes[scopeIndex].label}}</view></picker></view>
+    <view class="field"><text class="label">指定区域（逗号分隔）</text><input class="input" data-group="overrideForm" data-field="regions" value="{{overrideForm.regions}}" bindinput="input" /></view>
+    <view class="field"><text class="label">指定经理团队编号（逗号分隔）</text><input class="input" data-group="overrideForm" data-field="teamIds" value="{{overrideForm.teamIds}}" bindinput="input" /></view>
+    <view class="field"><text class="label">指定客户编号（逗号分隔）</text><input class="input" data-group="overrideForm" data-field="customerIds" value="{{overrideForm.customerIds}}" bindinput="input" /></view>
+    <view class="field"><text class="label">指定仓库编号（逗号分隔）</text><input class="input" data-group="overrideForm" data-field="warehouseIds" value="{{overrideForm.warehouseIds}}" bindinput="input" /></view>
+    <view class="field"><text class="label">截止时间（可空，如2026-12-31）</text><input class="input" data-group="overrideForm" data-field="expiresAt" value="{{overrideForm.expiresAt}}" bindinput="input" /></view>
+    <view class="field"><text class="label">授权原因（高危权限必填）</text><textarea class="textarea" data-group="overrideForm" data-field="reason" value="{{overrideForm.reason}}" bindinput="input" /></view>
+    <button class="btn primary full" bindtap="saveUserPermission">保存/提交权限调整</button>
+  </view>
+
+  <view wx:elif="{{tab === 'admins'}}" class="section">
+    <view class="section-title">权限管理员</view>
+    <view wx:if="{{isBoss}}">
+      <view class="field"><text class="label">人员</text><picker range="{{users}}" range-key="name" value="{{userIndex}}" data-field="userIndex" bindchange="selectIndex"><view class="picker">{{users[userIndex].name}}</view></picker></view>
+      <view class="field"><text class="label">可管理人员编号</text><input class="input" data-group="adminForm" data-field="personIds" bindinput="input" /></view>
+      <view class="field"><text class="label">可管理经理团队编号</text><input class="input" data-group="adminForm" data-field="teamIds" bindinput="input" /></view>
+      <view class="field"><text class="label">可管理区域</text><input class="input" data-group="adminForm" data-field="regions" bindinput="input" /></view>
+      <view class="field"><text class="label">授权上限（权限编码，逗号分隔）</text><textarea class="textarea" data-group="adminForm" data-field="grantCeiling" bindinput="input" /></view>
+      <view class="field inline"><text>允许提交高危申请</text><switch checked="{{adminForm.canRequestHighRisk}}" bindchange="toggleAdminRequest" /></view>
+      <view class="field"><text class="label">截止时间（可空）</text><input class="input" data-group="adminForm" data-field="expiresAt" bindinput="input" /></view>
+      <button class="btn primary full" bindtap="saveAdmin">保存权限管理员</button>
+    </view>
+    <view wx:for="{{admins}}" wx:key="_id" class="list-row">
+      <view class="row-title">{{item._id}} · {{item.status}}</view>
+      <view class="row-meta">团队：{{item.teamIds || '未指定'}} · 上限{{item.grantCeiling.length}}项</view>
+      <button wx:if="{{isBoss && item.status === '启用'}}" class="btn danger small top-space" data-id="{{item._id}}" bindtap="disableAdmin">停用</button>
+    </view>
+  </view>
+
+  <view wx:elif="{{tab === 'requests'}}" class="section">
+    <view class="section-title">高危授权申请</view>
+    <view wx:if="{{!requests.length}}" class="empty">没有授权申请。</view>
+    <view wx:for="{{requests}}" wx:key="_id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.targetName}} · {{item.permission}}</view><text class="badge">{{item.status}}</text></view>
+      <view class="row-meta">{{item.requestedByName}}申请 · {{item.override.reason}}</view>
+      <view wx:if="{{isBoss && item.status === '待老板确认'}}" class="row-actions top-space">
+        <button class="btn primary small" data-id="{{item._id}}" data-decision="通过" bindtap="reviewRequest">通过</button>
+        <button class="btn danger small" data-id="{{item._id}}" data-decision="驳回" bindtap="reviewRequest">驳回</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{tab === 'delegations'}}" class="section">
+    <view class="section-title">审批代理</view>
+    <view class="hint">原审批人与代理人均可处理，先处理者生效；代理不能跳过审批阶段。</view>
+    <view wx:if="{{isBoss}}">
+      <view class="field"><text class="label">业务类型（sales/expenses）</text><input class="input" data-group="delegationForm" data-field="businessType" value="{{delegationForm.businessType}}" bindinput="input" /></view>
+      <view class="field"><text class="label">审批阶段（supervisor/manager）</text><input class="input" data-group="delegationForm" data-field="stage" value="{{delegationForm.stage}}" bindinput="input" /></view>
+      <view class="field"><text class="label">经理团队编号</text><input class="input" data-group="delegationForm" data-field="managerId" bindinput="input" /></view>
+      <view class="field"><text class="label">代理人员编号</text><input class="input" data-group="delegationForm" data-field="delegateUserId" bindinput="input" /></view>
+      <view class="field"><text class="label">开始日期</text><input class="input" data-group="delegationForm" data-field="startDate" placeholder="2026-07-26" bindinput="input" /></view>
+      <view class="field"><text class="label">截止日期</text><input class="input" data-group="delegationForm" data-field="expiresAt" placeholder="2026-08-26" bindinput="input" /></view>
+      <view class="field"><text class="label">代理原因</text><input class="input" data-group="delegationForm" data-field="reason" bindinput="input" /></view>
+      <button class="btn primary full" bindtap="saveDelegation">保存审批代理</button>
+    </view>
+    <view wx:for="{{delegations}}" wx:key="_id" class="list-row">
+      <view class="row-head"><view class="row-title">{{item.managerName}} → {{item.delegateName}}</view><text class="badge">{{item.status}}</text></view>
+      <view class="row-meta">{{item.businessType}}.{{item.stage}} · {{item.startDate}} 至 {{item.expiresAt || '长期'}}</view>
+      <button wx:if="{{isBoss && item.status === '启用'}}" class="btn danger small top-space" data-id="{{item._id}}" bindtap="disableDelegation">停用</button>
+    </view>
+  </view>
+
+  <view wx:else class="section">
+    <view class="section-title">权限审计</view>
+    <view wx:if="{{!audit.length}}" class="empty">暂无权限审计记录。</view>
+    <view wx:for="{{audit}}" wx:key="_id" class="list-row">
+      <view class="row-title">{{item.action}} · {{item.actorName}}</view>
+      <view class="row-meta">{{item.target}} · {{item.detail}} · {{item.createdAt}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{roleEditor}}" class="role-mask">
+    <view class="role-dialog">
+      <view class="role-scroll">
+        <view class="section-title">{{roleEditor.id ? '修改角色模板' : '新建自定义角色'}}</view>
+        <view class="field"><text class="label">角色名称</text><input class="input" value="{{roleEditor.name}}" bindinput="roleName" /></view>
+        <view class="field inline"><text>启用模板</text><switch checked="{{roleEditor.status === '启用'}}" bindchange="roleStatus" /></view>
+        <view class="field"><text class="label">高危权限配置原因</text><input class="input" value="{{roleEditor.reason}}" bindinput="roleReason" placeholder="模板含高危权限时必填" /></view>
+        <view wx:for="{{definitions}}" wx:key="code" class="permission-row">
+          <checkbox-group data-code="{{item.code}}" bindchange="rolePermission"><label><checkbox value="selected" checked="{{roleEditor.selected[item.code]}}" />{{item.group}} · {{item.label}}<text wx:if="{{item.highRisk}}" class="danger-text">（高危）</text></label></checkbox-group>
+          <picker wx:if="{{roleEditor.selected[item.code]}}" class="permission-scope" range="{{scopes}}" range-key="label" value="{{roleEditor.scopeIndex[item.code] || 0}}" data-code="{{item.code}}" bindchange="roleScope"><view class="badge">{{scopes[roleEditor.scopeIndex[item.code] || 0].label}}</view></picker>
+        </view>
+      </view>
+      <view class="role-actions"><button class="btn full" bindtap="closeRole">取消</button><button class="btn primary full" bindtap="saveRole">保存</button></view>
+    </view>
+  </view>
+</view>

@@ -81,7 +81,11 @@ assert.deepStrictEqual(safeUser({
   managerId: "M001",
   supervisorId: "S001",
   status: "停用",
-  mustChangePassword: true
+  mustChangePassword: true,
+  permissionRoleId: "",
+  permissionRoleName: "",
+  permissionVersion: 0,
+  capabilities: []
 }, "安全用户对象不得包含密码字段");
 
 assert.strictEqual(validPassword("Tester@2026A", { username: "tester", name: "某员工" }), false, "密码不能包含账号");

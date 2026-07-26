@@ -11,6 +11,7 @@ Page({
     plans: [],
     payments: [],
     warehouseTerms: [],
+    canSetTerm: false,
     managers: [],
     paymentPlan: null,
     paymentAmount: "",
@@ -63,6 +64,7 @@ Page({
         plans,
         payments,
         warehouseTerms: data.warehouseTerms || [],
+        canSetTerm: Boolean(data.canSetTerm),
         managers: data.managers || []
       });
       if (this.pendingReceivableId) {

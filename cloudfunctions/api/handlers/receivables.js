@@ -6,8 +6,8 @@ const {
   getDoc,
   updateDoc,
   requireUser,
-  assertRole,
-  canSeeScoped,
+  assertPermission,
+  hasPermission,
   writeAudit,
   withIdempotency,
   userBusinessId,
@@ -20,8 +20,7 @@ const {
   nowIso,
   validDate,
   positiveNumber,
-  calc4,
-  roleLabel
+  calc4
 } = require("../lib/core");
 const {
   visibleWarehouses,
@@ -31,18 +30,15 @@ const {
 
 async function getReceivables(payload) {
   const user = await requireUser();
-  assertRole(user, ["manager", "boss", "finance"]);
+  assertPermission(user, "receivables.view");
   const selectedMonth = /^\d{4}-\d{2}$/.test(String(payload.month || "")) ? payload.month : monthKey();
-  const hasGlobalFinanceAccess = ["boss", "finance"].includes(user.role);
-  const allReceivables = hasGlobalFinanceAccess
-    ? await fetchAll("receivables", {})
-    : await fetchAll("receivables", { managerId: userBusinessId(user) });
-  const visible = allReceivables.filter((item) => Number(item.dueAmount || 0) > 0 || Number(item.paidAmount || 0) > 0);
+  const allReceivables = await fetchAll("receivables", {});
+  const permittedReceivables = allReceivables.filter((item) => hasPermission(user, "receivables.view", item));
+  const visible = permittedReceivables.filter((item) => Number(item.dueAmount || 0) > 0 || Number(item.paidAmount || 0) > 0);
   const decoratedAll = await decorateReceivables(user, visible);
   const plans = decoratedAll.filter((item) => monthKey(item.dueDate) === selectedMonth);
-  const payments = hasGlobalFinanceAccess
-    ? await fetchAll("warehouse_payments", {}, { max: 1000, orderBy: { field: "registeredAt", direction: "desc" } })
-    : await fetchAll("warehouse_payments", { managerId: userBusinessId(user) }, { max: 1000, orderBy: { field: "registeredAt", direction: "desc" } });
+  const payments = (await fetchAll("warehouse_payments", {}, { max: 1000, orderBy: { field: "registeredAt", direction: "desc" } }))
+    .filter((item) => hasPermission(user, "receivables.view", item));
   const activePayments = payments.filter((item) => item.status !== "已作废");
   const receivedThisMonth = activePayments
     .filter((item) => monthKey(item.paymentDate) === selectedMonth)
@@ -53,9 +49,7 @@ async function getReceivables(payload) {
   const overdue = decoratedAll.filter((item) => item.dueDate < localDate()).reduce((sum, item) => sum + item.outstanding, 0);
   const users = await fetchAll("users", {});
   const userMap = new Map(users.map((item) => [userBusinessId(item), item]));
-  const warehouseRows = hasGlobalFinanceAccess
-    ? await fetchAll("warehouses", { status: command.neq("停用") })
-    : await visibleWarehouses(user);
+  const warehouseRows = await visibleWarehouses(user, "receivables.view");
   const warehouseMap = new Map(warehouseRows.map((item) => [item._id, item]));
   const warehouseTerms = [...warehouseMap.values()].map((item) => ({
     id: item._id,
@@ -86,11 +80,12 @@ async function getReceivables(payload) {
       note: item.note || "",
       status: item.status,
       registeredByName: userMap.get(item.registeredBy)?.name || item.registeredByName || "",
-      canVerify: ["boss", "finance"].includes(user.role) && ["待老板核实", "待财务确认"].includes(item.status),
-      canVoid: item.status !== "已作废" && (["boss", "finance"].includes(user.role) || (["待老板核实", "待财务确认"].includes(item.status) && item.registeredBy === userBusinessId(user)))
+      canVerify: hasPermission(user, "receivables.verify", item) && ["待老板核实", "待财务确认"].includes(item.status),
+      canVoid: item.status !== "已作废" && hasPermission(user, "receivables.void", item)
     })),
     warehouseTerms,
-    managers: user.role === "boss"
+    canSetTerm: hasPermission(user, "receivables.term"),
+    managers: hasPermission(user, "receivables.term")
       ? users.filter((item) => item.role === "manager" && !item.disabled).map((item) => ({ id: userBusinessId(item), label: `${item.name} · ${item.province || item.department}` }))
       : []
   };
@@ -98,7 +93,7 @@ async function getReceivables(payload) {
 
 async function recordWarehousePayment(payload) {
   const user = await requireUser();
-  assertRole(user, ["manager", "boss", "finance"]);
+  assertPermission(user, "receivables.record");
   return withIdempotency(user, payload.idempotencyKey, "recordWarehousePayment", async () => {
     const amount = Number(payload.amount);
     const note = String(payload.note || "").trim();
@@ -112,7 +107,8 @@ async function recordWarehousePayment(payload) {
     let payment;
     await db.runTransaction(async (transaction) => {
       const receivable = (await transaction.collection("receivables").doc(payload.receivableId).get()).data;
-      if (!receivable || (!["boss", "finance"].includes(user.role) && !canSeeScoped(user, receivable))) fail("RECEIVABLE_FORBIDDEN", "应收计划不存在或不在当前权限范围。");
+      if (!receivable) fail("RECEIVABLE_FORBIDDEN", "应收计划不存在或不在当前权限范围。");
+      assertPermission(user, "receivables.record", receivable);
       const outstanding = calc4(Number(receivable.dueAmount || 0) - Number(receivable.paidAmount || 0));
       if (amount > outstanding) fail("PAYMENT_EXCEEDS_OUTSTANDING", `本次登记不能超过未回金额${outstanding.toFixed(2)}元。`);
       payment = {
@@ -124,12 +120,14 @@ async function recordWarehousePayment(payload) {
         amount: calc4(amount),
         reference,
         note,
-        status: user.role === "boss" ? "老板已核实" : user.role === "finance" ? "财务已确认" : "待财务确认",
+        status: hasPermission(user, "receivables.verify", receivable)
+          ? (user.role === "finance" ? "财务已确认" : "老板已核实")
+          : "待财务确认",
         registeredBy: userBusinessId(user),
         registeredByName: user.name,
         registeredAt: nowIso(),
-        verifiedBy: ["boss", "finance"].includes(user.role) ? userBusinessId(user) : "",
-        verifiedAt: ["boss", "finance"].includes(user.role) ? nowIso() : ""
+        verifiedBy: hasPermission(user, "receivables.verify", receivable) ? userBusinessId(user) : "",
+        verifiedAt: hasPermission(user, "receivables.verify", receivable) ? nowIso() : ""
       };
       await transaction.collection("warehouse_payments").doc(id).set({ data: payment });
       await transaction.collection("receivables").doc(receivable._id).update({
@@ -143,14 +141,20 @@ async function recordWarehousePayment(payload) {
 
 async function verifyWarehousePayment(payload) {
   const user = await requireUser();
-  assertRole(user, ["boss", "finance"]);
   const payment = await getDoc("warehouse_payments", payload.paymentId);
+  if (payment) assertPermission(user, "receivables.verify", payment);
   if (!payment || !["待老板核实", "待财务确认"].includes(payment.status)) fail("PAYMENT_NOT_VERIFIABLE", "回款不存在或当前不需要核实。");
   const status = user.role === "finance" ? "财务已确认" : "老板已核实";
-  await updateDoc("warehouse_payments", payment._id, {
-    status,
-    verifiedBy: userBusinessId(user),
-    verifiedAt: nowIso()
+  await db.runTransaction(async (transaction) => {
+    const current = (await transaction.collection("warehouse_payments").doc(payment._id).get()).data;
+    if (!["待老板核实", "待财务确认"].includes(current.status)) {
+      fail("PAYMENT_NOT_VERIFIABLE", "回款不存在或当前不需要核实。");
+    }
+    await transaction.collection("warehouse_payments").doc(payment._id).update({ data: {
+      status,
+      verifiedBy: userBusinessId(user),
+      verifiedAt: nowIso()
+    } });
   });
   await writeAudit(user, "核实仓库回款", payment._id, `${payment.settlementMonth}销售 / ${Number(payment.amount).toFixed(2)}元`);
   return { status };
@@ -158,16 +162,11 @@ async function verifyWarehousePayment(payload) {
 
 async function voidWarehousePayment(payload) {
   const user = await requireUser();
-  assertRole(user, ["manager", "boss", "finance"]);
   const reason = String(payload.reason || "").trim();
   if (reason.length < 2 || reason.length > 200) fail("INVALID_VOID_REASON", "撤销原因需填写2到200个字。");
   const original = await getDoc("warehouse_payments", payload.paymentId);
   if (!original) fail("PAYMENT_NOT_FOUND", "回款记录不存在。");
-  const ownPending = user.role === "manager"
-    && ["待老板核实", "待财务确认"].includes(original.status)
-    && original.registeredBy === userBusinessId(user)
-    && original.managerId === userBusinessId(user);
-  if (!["boss", "finance"].includes(user.role) && !ownPending) fail("PAYMENT_VOID_FORBIDDEN", "经理只能撤销自己登记且尚未核实的回款。");
+  assertPermission(user, "receivables.void", original);
 
   await db.runTransaction(async (transaction) => {
     const payment = (await transaction.collection("warehouse_payments").doc(original._id).get()).data;
@@ -191,8 +190,8 @@ async function voidWarehousePayment(payload) {
 
 async function updateWarehouseTerm(payload) {
   const user = await requireUser();
-  assertRole(user, ["boss"]);
   const warehouse = await getDoc("warehouses", payload.warehouseId);
+  if (warehouse) assertPermission(user, "receivables.term", warehouse);
   const managers = await fetchAll("users", { role: "manager", disabled: false });
   const manager = managers.find((item) => userBusinessId(item) === payload.managerId);
   const creditDays = Number(payload.creditDays);

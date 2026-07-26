@@ -54,7 +54,7 @@
       <view wx:for="{{finance}}" wx:key="id" class="list-row">
         <view class="row-head"><view class="row-title">{{item.repName}} · {{item.type}}</view><text class="amount">¥{{item.amountText}}</text></view>
         <view class="row-meta">{{item.customerName}} · 审批{{item.status}} · 付款{{item.paymentStatus}} · 发票{{item.invoiceStatus}}</view>
-        <view wx:if="{{user.role === 'boss'}}" class="row-actions top-space">
+        <view wx:if="{{item.canMarkPaid || item.canMarkInvoiced}}" class="row-actions top-space">
           <button wx:if="{{item.canMarkPaid}}" class="btn primary small" data-action="markExpensePaid" data-id="{{item.id}}" bindtap="action">确认付款</button>
           <button wx:if="{{item.canMarkInvoiced}}" class="btn small" data-action="markExpenseInvoiced" data-id="{{item.id}}" bindtap="action">确认收票</button>
         </view>

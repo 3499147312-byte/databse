@@ -4,7 +4,10 @@ const path = require("path");
 const catalog = require("./fixtures/feature-flow-catalog");
 
 const root = path.resolve(__dirname, "..");
-const manual = fs.readFileSync(path.join(root, "docs", "用户使用手册_V1.1.md"), "utf8");
+const manual = [
+  fs.readFileSync(path.join(root, "docs", "用户使用手册_V1.1.md"), "utf8"),
+  fs.readFileSync(path.join(root, "docs", "用户使用手册_V1.2.md"), "utf8")
+].join("\n");
 const report = fs.readFileSync(path.join(root, "docs", "自动化测试报告_2026-07-24.md"), "utf8");
 const testSource = fs.readdirSync(path.join(root, "tests"))
   .filter((name) => name.endsWith(".test.js"))

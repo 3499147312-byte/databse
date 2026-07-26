@@ -3,6 +3,7 @@ const path = require("path");
 const apiRoot = path.resolve(__dirname, "..", "..", "cloudfunctions", "api");
 const contextPath = path.join(apiRoot, "lib", "context.js");
 const domainPath = path.join(apiRoot, "lib", "domain.js");
+const permissionLib = require(path.join(apiRoot, "lib", "permissions.js"));
 
 function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -174,12 +175,58 @@ function createHarness(seed = {}, currentUser = null) {
     async findUserByOpenid(openid) {
       return clone(rows("users").find((item) => item.openid === openid) || null);
     },
-    async requireUser() {
+    async attachAuthorization(user) {
+      if (!user || user._authorization) return clone(user);
+      const id = userBusinessId(user);
+      const roleId = user.role === "boss"
+        ? permissionLib.permissionRoleIdForPosition("boss")
+        : user.permissionRoleId || permissionLib.permissionRoleIdForPosition(user.role);
+      const roleDocument = table("permission_roles")[roleId] || null;
+      const permissionDocument = table("user_permissions")[id] || null;
+      const adminDocument = table("permission_admins")[id] || null;
+      const authorization = permissionLib.resolveEffectivePermissions(user, roleDocument, permissionDocument, adminDocument);
+      for (const grant of Object.values(authorization.grants || {})) {
+        const regions = grant.scope?.regions || [];
+        if (!regions.length) continue;
+        const teamIds = rows("users")
+          .filter((item) => item.role === "manager" && !item.disabled)
+          .filter((item) => regions.some((region) => {
+            const targetRegion = String(item.province || item.department || "");
+            return targetRegion === region || targetRegion.startsWith(`${region}/`);
+          }))
+          .map(userBusinessId);
+        grant.scope.teamIds = [...new Set([...(grant.scope.teamIds || []), ...teamIds])];
+      }
+      return {
+        ...clone(user),
+        permissionRoleId: roleId,
+        _authorization: authorization,
+        _permissionAdmin: clone(adminDocument)
+      };
+    },
+    async requireUser(options = {}) {
       if (!state.currentUser) fail("AUTH_REQUIRED", "not logged in");
-      return clone(state.currentUser);
+      if (state.currentUser.reauthRequired && !options.allowReauth) fail("REAUTH_REQUIRED", "reauth required");
+      return context.attachAuthorization(state.currentUser);
     },
     assertRole(user, roles) {
       if (!roles.includes(user.role)) fail("FORBIDDEN", "forbidden");
+    },
+    hasPermission(user, permission, item = null) {
+      const grant = user?._authorization?.grants?.[permission];
+      return Boolean(grant?.allowed && permissionLib.scopeAllows(user, grant.scope, item));
+    },
+    assertPermission(user, permission, item = null) {
+      const grant = user?._authorization?.grants?.[permission];
+      if (!grant?.allowed && user?._authorization?.expiredCodes?.includes(permission)) fail("GRANT_EXPIRED", "grant expired");
+      if (!grant?.allowed) fail("PERMISSION_DENIED", "permission denied");
+      if (!permissionLib.scopeAllows(user, grant.scope, item)) fail("SCOPE_DENIED", "scope denied");
+      return grant;
+    },
+    assertAnyPermission(user, permissions, item = null) {
+      const matched = permissions.find((permission) => context.hasPermission(user, permission, item));
+      if (!matched) fail("PERMISSION_DENIED", "permission denied");
+      return matched;
     },
     scopeWhere(user) {
       const id = userBusinessId(user);
@@ -188,13 +235,59 @@ function createHarness(seed = {}, currentUser = null) {
       if (user.role === "rep") return { repId: id };
       return null;
     },
-    canSeeScoped(user, item) {
+    canSeeScoped(user, item, permission = "") {
+      if (permission && user?._authorization) return context.hasPermission(user, permission, item);
       const id = userBusinessId(user);
       return user.role === "boss"
         || (user.role === "manager" && item.managerId === id)
         || (user.role === "supervisor" && item.supervisorId === id)
         || (user.role === "rep" && item.repId === id);
     },
+    async fetchPermitted(name, user, permission, where = {}, options = {}) {
+      context.assertPermission(user, permission);
+      return (await context.fetchAll(name, where, options)).filter((item) => context.hasPermission(user, permission, item));
+    },
+    async ensureBuiltinPermissionRoles() {
+      for (const role of permissionLib.builtinRoles()) {
+        if (!table("permission_roles")[role._id]) {
+          const record = clone(role);
+          record.grantList = Object.entries(record.grants || {}).map(([permission, scope]) => ({ permission, scope }));
+          delete record.grants;
+          table("permission_roles")[role._id] = { _id: role._id, ...record, version: 1 };
+        }
+      }
+    },
+    async bumpPermissionVersion(userId, options = {}) {
+      const user = rows("users").find((item) => userBusinessId(item) === userId);
+      if (!user) fail("USER_NOT_FOUND", "user not found");
+      user.permissionVersion = Number(user.permissionVersion || 0) + 1;
+      if (options.forceReauth) user.reauthRequired = true;
+      return user.permissionVersion;
+    },
+    async activeApprovalDelegation(user, item, businessType, stage) {
+      const id = userBusinessId(user);
+      const today = new Date().toISOString().slice(0, 10);
+      return clone(rows("approval_delegations").find((entry) => entry.delegateUserId === id
+        && entry.managerId === item.managerId
+        && entry.businessType === businessType
+        && entry.stage === stage
+        && entry.status === "启用"
+        && (!entry.startDate || entry.startDate <= today)
+        && (!entry.expiresAt || entry.expiresAt.slice(0, 10) >= today)) || null);
+    },
+    async assertApprovalAuthority(user, item, businessType, stage) {
+      const id = userBusinessId(user);
+      const ownerId = stage === "supervisor" ? item.supervisorId : item.managerId;
+      const permission = `${businessType}.approve.${stage}`;
+      if (ownerId === id) {
+        context.assertPermission(user, permission, item);
+        return { delegated: false, stage, permission };
+      }
+      const delegation = await context.activeApprovalDelegation(user, item, businessType, stage);
+      if (!delegation) fail("WRONG_APPROVAL_LEVEL", "wrong approval level");
+      return { delegated: true, stage, permission, delegation };
+    },
+    HIGH_RISK_PERMISSIONS: permissionLib.HIGH_RISK_PERMISSIONS,
     async writeAudit(user, action, target, detail) {
       state.audits.push({ user: clone(user), action, target, detail });
     },
@@ -206,9 +299,14 @@ function createHarness(seed = {}, currentUser = null) {
     safeUser(user) {
       if (!user) return null;
       const copy = clone(user);
+      const authorization = copy._authorization;
       delete copy.passwordHash;
       delete copy.passwordSalt;
       delete copy.passwordIterations;
+      delete copy._authorization;
+      delete copy._permissionAdmin;
+      copy.permissionRoleName = authorization?.roleName || "";
+      copy.capabilities = authorization?.codes || [];
       return copy;
     },
     userBusinessId,

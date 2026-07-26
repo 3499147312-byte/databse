@@ -1,13 +1,14 @@
 const crypto = require("crypto");
 const {
+  db,
   command,
   fetchAll,
   getDoc,
   setDoc,
   updateDoc,
   requireUser,
-  assertRole,
-  canSeeScoped,
+  assertPermission,
+  hasPermission,
   writeAudit,
   userBusinessId,
   safeUser,
@@ -129,10 +130,12 @@ async function ensureWeeklyTasks(user) {
 
 async function getReports() {
   const user = await requireUser();
-  assertRole(user, ["rep", "supervisor", "manager", "boss"]);
-  await ensureWeeklyTasks(user);
+  assertPermission(user, "reports.view");
+  if (hasPermission(user, "reports.weekly.submit") || user.role === "boss") await ensureWeeklyTasks(user);
   const month = monthKey();
-  const sales = await scopedRows("sales", user, { settlementMonth: month, status: "已通过", correctionStatus: "正常" }, { max: 3000 });
+  const sales = hasPermission(user, "sales.view")
+    ? await scopedRows("sales", user, { settlementMonth: month, status: "已通过", correctionStatus: "正常" }, { max: 3000 }, "sales.view")
+    : [];
   const users = await fetchAll("users", {});
   const userMap = new Map(users.map((item) => [userBusinessId(item), item]));
   const grouped = new Map();
@@ -154,24 +157,28 @@ async function getReports() {
   });
 
   let policies;
-  if (user.role === "rep") {
-    const customers = await visibleCustomers(user);
+  if (hasPermission(user, "policies.view") && user.role === "rep") {
+    const customers = await visibleCustomers(user, "policies.view");
     const customerIds = customers.map((item) => item._id);
     policies = customerIds.length
       ? await fetchAll("policies", { customerId: command.in(customerIds) }, { max: 1000 })
       : [];
+  } else if (hasPermission(user, "policies.view")) {
+    policies = await scopedRows("policies", user, {}, { max: 1000 }, "policies.view");
   } else {
-    policies = await scopedRows("policies", user, {}, { max: 1000 });
+    policies = [];
   }
   const policyCustomerMap = await mapById("customers", policies.map((item) => item.customerId));
   const productMap = await mapById("products", policies.map((item) => item.productId));
   let weekly = [];
   if (user.role === "boss") weekly = await fetchAll("weekly_reports", { week: isoWeek() });
-  else if (["manager", "supervisor"].includes(user.role)) weekly = await fetchAll("weekly_reports", { week: isoWeek(), ownerId: userBusinessId(user) });
+  else if (hasPermission(user, "reports.weekly.submit")) weekly = await fetchAll("weekly_reports", { week: isoWeek(), ownerId: userBusinessId(user) });
   const weeklyCustomerMap = await mapById("customers", weekly.map((item) => item.customerId));
 
   const risks = [];
-  const warehouses = await visibleWarehouses(user);
+  const warehouses = hasPermission(user, "reports.risk.view") && hasPermission(user, "inventory.view")
+    ? await visibleWarehouses(user, "inventory.view")
+    : [];
   const warehouseIds = warehouses.map((item) => item._id);
   const lots = warehouseIds.length ? await fetchAll("inventory_lots", { warehouseId: command.in(warehouseIds) }) : [];
   const lotProductMap = await mapById("products", lots.map((item) => item.productId));
@@ -185,23 +192,29 @@ async function getReports() {
   policies.filter((item) => item.status === "待老板审核").forEach((item) => {
     risks.push({ key: `policy_${item._id}`, level: "中", type: "政策未审", target: policyCustomerMap.get(item.customerId)?.name || item.customerId, detail: "未经过老板审核，不能作为销售和费用规则" });
   });
-  if (["boss", "manager"].includes(user.role)) {
-    const where = user.role === "boss" ? {} : { managerId: userBusinessId(user) };
-    const decorated = await decorateReceivables(user, await fetchAll("receivables", where));
+  if (hasPermission(user, "reports.risk.view") && hasPermission(user, "receivables.view")) {
+    const receivableRows = (await fetchAll("receivables", {}))
+      .filter((item) => hasPermission(user, "receivables.view", item));
+    const decorated = await decorateReceivables(user, receivableRows);
     decorated.filter((item) => item.dueDate < localDate() && item.outstanding > 0).forEach((item) => {
       risks.push({ key: `recv_${item.id}`, level: "高", type: "回款逾期", target: item.warehouseName, detail: `${item.settlementMonth}销售尚欠${item.outstanding.toFixed(2)}元，到期日${item.dueDate}` });
     });
   }
-  if (user.role === "boss") {
-    const pendingPayments = await fetchAll("warehouse_payments", { status: command.in(["待老板核实", "待财务确认"]) });
+  if (hasPermission(user, "reports.risk.view") && hasPermission(user, "receivables.verify")) {
+    const pendingPayments = (await fetchAll("warehouse_payments", { status: command.in(["待老板核实", "待财务确认"]) }))
+      .filter((item) => hasPermission(user, "receivables.verify", item));
     pendingPayments.forEach((item) => risks.push({ key: `payment_${item._id}`, level: "中", type: "回款待核实", target: item.warehouseName || item.warehouseId, detail: `${item.paymentDate}登记到账${Number(item.amount).toFixed(2)}元` }));
   }
 
-  const finance = await scopedRows("expenses", user, { status: "已通过" }, { max: 1000 });
+  const finance = hasPermission(user, "expenses.view")
+    ? await scopedRows("expenses", user, { status: "已通过" }, { max: 1000 }, "expenses.view")
+    : [];
   const financeCustomerMap = await mapById("customers", finance.map((item) => item.customerId));
   let audit = [];
-  if (user.role === "boss") audit = await fetchAll("audit_logs", {}, { max: 500, orderBy: { field: "createdAt", direction: "desc" } });
-  else audit = await fetchAll("audit_logs", { actorId: userBusinessId(user) }, { max: 200, orderBy: { field: "createdAt", direction: "desc" } });
+  if (hasPermission(user, "reports.audit.view")) {
+    audit = (await fetchAll("audit_logs", {}, { max: 500, orderBy: { field: "createdAt", direction: "desc" } }))
+      .filter((item) => hasPermission(user, "reports.audit.view", { ...item, repId: item.actorId, ownerId: item.actorId }));
+  }
 
   return {
     user: safeUser(user),
@@ -227,7 +240,7 @@ async function getReports() {
       week: item.week,
       status: item.status,
       note: item.note,
-      canSubmit: item.ownerId === userBusinessId(user) && item.status === "未提交"
+      canSubmit: hasPermission(user, "reports.weekly.submit", { ...item, ownerId: item.ownerId }) && item.ownerId === userBusinessId(user) && item.status === "未提交"
     })),
     risks,
     finance: finance.map((item) => ({
@@ -239,8 +252,8 @@ async function getReports() {
       status: item.status,
       paymentStatus: item.paymentStatus,
       invoiceStatus: item.invoiceStatus,
-      canMarkPaid: user.role === "boss" && item.paymentStatus !== "已付款",
-      canMarkInvoiced: user.role === "boss" && item.invoiceStatus === "待收票"
+      canMarkPaid: hasPermission(user, "expenses.pay", item) && item.paymentStatus !== "已付款",
+      canMarkInvoiced: hasPermission(user, "expenses.invoice", item) && item.invoiceStatus === "待收票"
     })),
     audit: audit.map((item) => ({
       id: item._id,
@@ -255,16 +268,17 @@ async function getReports() {
 
 async function getBossPerformance(payload) {
   const user = await requireUser();
-  assertRole(user, ["boss"]);
+  assertPermission(user, "performance.view");
   const currentMonth = monthKey();
   const lastMonth = previousMonth(currentMonth);
   const selectedMonth = [currentMonth, lastMonth].includes(String(payload.month || "")) ? payload.month : currentMonth;
-  const [sales, users, warehouses, products] = await Promise.all([
+  const [allSales, users, warehouses, products] = await Promise.all([
     fetchAll("sales", { settlementMonth: selectedMonth, status: "已通过", correctionStatus: "正常" }, { max: 10000 }),
     fetchAll("users", { role: "manager", disabled: false }, { max: 3000 }),
     fetchAll("warehouses", {}, { max: 3000 }),
     fetchAll("products", {}, { max: 3000 })
   ]);
+  const sales = allSales.filter((item) => hasPermission(user, "performance.view", item));
   const managerMap = new Map(users.map((item) => [userBusinessId(item), item]));
   const warehouseMap = new Map(warehouses.map((item) => [item._id, item]));
   const productMap = new Map(products.map((item) => [item._id, item]));
@@ -331,7 +345,7 @@ async function getBossPerformance(payload) {
 
 async function submitWeekly(payload) {
   const user = await requireUser();
-  assertRole(user, ["manager", "supervisor"]);
+  assertPermission(user, "reports.weekly.submit");
   const report = await getDoc("weekly_reports", payload.id);
   if (!report || report.ownerId !== userBusinessId(user) || report.status !== "未提交") fail("WEEKLY_FORBIDDEN", "周任务不存在、已经提交或不属于当前账号。");
   await updateDoc("weekly_reports", report._id, {
@@ -346,8 +360,8 @@ async function submitWeekly(payload) {
 
 async function approvePolicy(payload) {
   const user = await requireUser();
-  assertRole(user, ["boss"]);
   const policy = await getDoc("policies", payload.id);
+  if (policy) assertPermission(user, "policies.approve", policy);
   if (!policy || policy.status !== "待老板审核") fail("POLICY_NOT_APPROVABLE", "政策不存在或已经处理。");
   const amounts = [policy.invoicePrice, policy.retailPrice, policy.headRebate, policy.noInvoiceRebate, policy.promoSpend];
   if (!validDate(policy.start) || !validDate(policy.end) || policy.start > policy.end
@@ -355,10 +369,14 @@ async function approvePolicy(payload) {
     || !positiveNumber(policy.monthlyTarget, 1000000, true)) {
     fail("POLICY_INVALID", "政策中的日期、销售价、返利、推广费用或预计月销不合法。");
   }
-  await updateDoc("policies", policy._id, {
-    status: "老板已通过",
-    approvedBy: userBusinessId(user),
-    approvedAt: nowIso()
+  await db.runTransaction(async (transaction) => {
+    const current = (await transaction.collection("policies").doc(policy._id).get()).data;
+    if (current.status !== "待老板审核") fail("POLICY_NOT_APPROVABLE", "政策不存在或已经处理。");
+    await transaction.collection("policies").doc(policy._id).update({ data: {
+      status: "老板已通过",
+      approvedBy: userBusinessId(user),
+      approvedAt: nowIso()
+    } });
   });
   await writeAudit(user, "老板审核客户政策", policy._id, "政策审核通过");
   return { status: "老板已通过" };
@@ -366,16 +384,20 @@ async function approvePolicy(payload) {
 
 async function rejectPolicy(payload) {
   const user = await requireUser();
-  assertRole(user, ["boss"]);
   const reason = String(payload.reason || "").trim();
   if (reason.length < 2 || reason.length > 200) fail("INVALID_REJECT_REASON", "驳回原因需填写2到200个字。");
   const policy = await getDoc("policies", payload.id);
+  if (policy) assertPermission(user, "policies.reject", policy);
   if (!policy || policy.status !== "待老板审核") fail("POLICY_NOT_APPROVABLE", "政策不存在或已经处理。");
-  await updateDoc("policies", policy._id, {
-    status: "老板驳回",
-    rejectedReason: reason,
-    rejectedBy: userBusinessId(user),
-    rejectedAt: nowIso()
+  await db.runTransaction(async (transaction) => {
+    const current = (await transaction.collection("policies").doc(policy._id).get()).data;
+    if (current.status !== "待老板审核") fail("POLICY_NOT_APPROVABLE", "政策不存在或已经处理。");
+    await transaction.collection("policies").doc(policy._id).update({ data: {
+      status: "老板驳回",
+      rejectedReason: reason,
+      rejectedBy: userBusinessId(user),
+      rejectedAt: nowIso()
+    } });
   });
   await writeAudit(user, "老板驳回客户政策", policy._id, reason);
   return { status: "老板驳回" };
